@@ -73,6 +73,13 @@ export default function OkuScreen() {
     return toks.slice(Math.max(0, index - 5), index + 6).map(t => t.val).join('')
   }
 
+  const cefrHighlight: Record<string, string> = {
+    C2: 'rgba(250,204,21,0.5)',
+    C1: 'rgba(250,204,21,0.3)',
+    B2: 'rgba(96,165,250,0.3)',
+    B1: 'rgba(96,165,250,0.15)',
+  }
+
   async function handleWordPress(word: string, sentence: string) {
     const k = word.toLowerCase()
     if (cache.current[k]) { setTip({ word, ...cache.current[k] }); return }
@@ -148,6 +155,10 @@ export default function OkuScreen() {
                   onPress={() => handleWordPress(t.val, getSentence(i, tokens))}
                   style={[
                     styles.word,
+                    cache.current[t.val.toLowerCase()]?.cefr && {
+                      backgroundColor: cefrHighlight[cache.current[t.val.toLowerCase()].cefr] || 'transparent',
+                      borderRadius: 3,
+                    },
                     tip?.word?.toLowerCase() === t.val.toLowerCase() && styles.wordActive
                   ]}
                 >
