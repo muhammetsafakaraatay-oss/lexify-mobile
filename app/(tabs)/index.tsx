@@ -91,11 +91,11 @@ export default function OkuScreen() {
       await supabase.from('saved_words').delete().eq('user_id', user.id).eq('word', tip.word)
       setSaved(p => { const n = { ...p }; delete n[k]; return n })
     } else {
-      await supabase.from('saved_words').insert({
+      await supabase.from('saved_words').upsert({
         user_id: user.id, word: tip.word,
         translation: tip.tr, context: tip.example || tip.context,
         cefr: tip.cefr
-      })
+      }, { onConflict: 'user_id,word' })
       setSaved(p => ({ ...p, [k]: true }))
     }
   }
