@@ -49,7 +49,14 @@ export default function OkuScreen() {
     if (!url.trim()) return
     setFetching(true)
     try {
-      const data = await fetchArticle(url)
+      const isYoutube = url.includes('youtube.com') || url.includes('youtu.be')
+      const endpoint = isYoutube ? '/api/youtube-transcript' : '/api/fetch-article'
+      const res = await fetch('https://lexitr.vercel.app' + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await res.json()
       if (data.text) {
         setInput(data.text)
         await saveHistory(url, data.text)
