@@ -91,6 +91,7 @@ export default function OkuScreen() {
         translation: tip.tr, context: tip.example || tip.context, cefr: tip.cefr
       }, { onConflict: 'user_id,word' })
       setSaved(p => ({ ...p, [k]: true }))
+      setTip((prev: any) => prev ? { ...prev, _saved: true } : prev)
     }
   }
 

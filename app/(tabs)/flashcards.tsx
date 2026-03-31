@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, SafeAreaView, Animated, PanResponder, Dimensions
+  ActivityIndicator, Animated, Dimensions
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { colors } from '../../lib/theme'
 import * as Speech from 'expo-speech'
@@ -10,13 +11,8 @@ import * as Speech from 'expo-speech'
 const { width } = Dimensions.get('window')
 
 interface Word {
-  id: string
-  word: string
-  translation: string
-  context?: string
-  mastered: boolean
-  review_count: number
-  cefr?: string
+  id: string; word: string; translation: string
+  context?: string; mastered: boolean; review_count: number; cefr?: string
 }
 
 export default function FlashcardsScreen() {
@@ -27,9 +23,11 @@ export default function FlashcardsScreen() {
   const [finished, setFinished] = useState(false)
   const [streak, setStreak] = useState(0)
   const [results, setResults] = useState<Record<string, 'know' | 'dontknow'>>({})
+  const flipAnim = useRef(new Animated.Value(0)).current
 
-  const flipAnim = new Animated.Value(0)
-  const pan = new Animated.ValueXY()
+  const cefrColor: Record<string, string> = {
+    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
+  }
 
   useEffect(() => { loadWords() }, [])
 
@@ -50,7 +48,7 @@ export default function FlashcardsScreen() {
 
   function flipCard() {
     const toValue = flipped ? 0 : 1
-    Animated.spring(flipAnim, { toValue, useNativeDriver: true }).start()
+    Animated.spring(flipAnim, { toValue, useNativeDriver: true, friction: 8, tension: 10 }).start()
     setFlipped(!flipped)
   }
 
@@ -61,54 +59,42 @@ export default function FlashcardsScreen() {
     if (result === 'know') {
       setStreak(s => s + 1)
       const newCount = (word.review_count || 0) + 1
-      await supabase.from('saved_words').update({
-        review_count: newCount, mastered: newCount >= 3
-      }).eq('id', word.id).eq('user_id', user!.id)
+      await supabase.from('saved_words').update({ review_count: newCount, mastered: newCount >= 3 }).eq('id', word.id).eq('user_id', user!.id)
     } else {
       setStreak(0)
-      await supabase.from('saved_words').update({
-        review_count: Math.max(0, (word.review_count || 0) - 1)
-      }).eq('id', word.id).eq('user_id', user!.id)
+      await supabase.from('saved_words').update({ review_count: Math.max(0, (word.review_count || 0) - 1) }).eq('id', word.id).eq('user_id', user!.id)
     }
-    flipAnim.setValue(0)
+    Animated.timing(flipAnim, { toValue: 0, duration: 0, useNativeDriver: true }).start()
     setFlipped(false)
     if (current + 1 >= words.length) setFinished(true)
     else setCurrent(c => c + 1)
   }
 
-  const cefrColor: Record<string, string> = {
-    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
-  }
+  const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
+  const backRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] })
+  const frontOpacity = flipAnim.interpolate({ inputRange: [0, 0.5, 0.5, 1], outputRange: [1, 1, 0, 0] })
+  const backOpacity = flipAnim.interpolate({ inputRange: [0, 0.5, 0.5, 1], outputRange: [0, 0, 1, 1] })
 
-  const frontInterpolate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
-  const backInterpolate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] })
-
-  if (loading) return (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.accent} size="large" />
-    </View>
-  )
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
 
   if (words.length === 0) return (
     <View style={styles.center}>
-      <Text style={styles.emptyText}>Henuz kelime eklemediniz.</Text>
-      <Text style={styles.emptySubText}>Once bazi kelimeleri kaydedin.</Text>
+      <Text style={styles.emptyText}>Henuz kelime eklemediniz</Text>
     </View>
   )
 
   if (finished) {
     const known = Object.values(results).filter(r => r === 'know').length
-    const total = Object.values(results).length
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <Text style={styles.finishEmoji}>🎉</Text>
           <Text style={styles.finishTitle}>Tebrikler!</Text>
-          <Text style={styles.finishSub}>{known}/{total} kelime bildiniz</Text>
+          <Text style={styles.finishSub}>{known}/{Object.values(results).length} kelime bildiniz</Text>
           {streak > 2 && <Text style={styles.streakText}>🔥 {streak} seri!</Text>}
           <TouchableOpacity style={styles.restartBtn} onPress={() => {
             setCurrent(0); setFlipped(false); setFinished(false)
-            setResults({}); setStreak(0); loadWords()
+            setResults({}); setStreak(0); flipAnim.setValue(0); loadWords()
           }}>
             <Text style={styles.restartBtnText}>Tekrar Calis</Text>
           </TouchableOpacity>
@@ -127,8 +113,8 @@ export default function FlashcardsScreen() {
       </View>
 
       <View style={styles.cardArea}>
-        <TouchableOpacity onPress={flipCard} activeOpacity={0.95}>
-          <Animated.View style={[styles.card, styles.cardFront, { transform: [{ rotateY: frontInterpolate }] }, !flipped && styles.cardVisible]}>
+        <TouchableOpacity onPress={flipCard} activeOpacity={0.95} style={styles.cardWrapper}>
+          <Animated.View style={[styles.card, styles.cardFront, { opacity: frontOpacity, transform: [{ rotateY: frontRotate }] }]}>
             <Text style={styles.cardWord}>{word.word}</Text>
             {word.cefr && (
               <View style={[styles.cefrBadge, { borderColor: cefrColor[word.cefr] }]}>
@@ -140,7 +126,8 @@ export default function FlashcardsScreen() {
             </TouchableOpacity>
             <Text style={styles.tapHint}>Cevirmek icin dokun</Text>
           </Animated.View>
-          <Animated.View style={[styles.card, styles.cardBack, { transform: [{ rotateY: backInterpolate }] }, flipped && styles.cardVisible]}>
+
+          <Animated.View style={[styles.card, styles.cardBack, { opacity: backOpacity, transform: [{ rotateY: backRotate }] }]}>
             <Text style={styles.cardTranslation}>{word.translation}</Text>
             {word.context ? <Text style={styles.cardContext}>{word.context}</Text> : null}
           </Animated.View>
@@ -161,15 +148,15 @@ export default function FlashcardsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 48 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, padding: 24 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   progress: { color: colors.textMuted, fontSize: 16 },
   streakBadge: { fontSize: 18 },
   cardArea: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { width: width - 48, height: 280, borderRadius: 20, alignItems: 'center', justifyContent: 'center', padding: 32, backfaceVisibility: 'hidden', position: 'absolute' },
+  cardWrapper: { width: width - 48, height: 280 },
+  card: { width: '100%', height: '100%', borderRadius: 20, alignItems: 'center', justifyContent: 'center', padding: 32, position: 'absolute', backfaceVisibility: 'hidden' },
   cardFront: { backgroundColor: '#111', borderWidth: 1, borderColor: colors.border },
   cardBack: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: colors.accent },
-  cardVisible: { position: 'relative' },
   cardWord: { fontSize: 36, fontWeight: '800', color: colors.text, textAlign: 'center', marginBottom: 12 },
   cefrBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 16 },
   cefrText: { fontSize: 12, fontWeight: '700' },
@@ -182,8 +169,7 @@ const styles = StyleSheet.create({
   dontknowBtn: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#f87171' },
   knowBtn: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 14, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#4ade80' },
   btnText: { color: colors.text, fontWeight: '700', fontSize: 15 },
-  emptyText: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  emptySubText: { color: colors.textMuted, fontSize: 15 },
+  emptyText: { color: colors.textMuted, fontSize: 20, fontWeight: '700' },
   finishEmoji: { fontSize: 64, marginBottom: 16 },
   finishTitle: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: 8 },
   finishSub: { color: colors.textMuted, fontSize: 18, marginBottom: 24 },

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, SafeAreaView, ActivityIndicator
@@ -20,6 +21,10 @@ export default function WordsScreen() {
   }
 
   useEffect(() => { loadWords() }, [])
+
+  useFocusEffect(
+    require('react').useCallback(() => { loadWords() }, [])
+  )
 
   useEffect(() => {
     let result = [...words]
