@@ -36,12 +36,29 @@ export default function OkuScreen() {
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const cache = useRef<Record<string, any>>({})
 
+  async function saveHistory(articleUrl: string, text: string) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from('reading_history').insert({
+        user_id: user.id,
+        url: articleUrl,
+        title: articleUrl,
+        word_count: text.split(' ').length,
+      })
+    } catch (e) { console.error(e) }
+  }
+
   async function handleFetchArticle() {
     if (!url.trim()) return
     setFetching(true)
     try {
       const data = await fetchArticle(url)
-      if (data.text) { setInput(data.text); setUrl('') }
+      if (data.text) {
+        setInput(data.text)
+        await saveHistory(url, data.text)
+        setUrl('')
+      }
     } catch (e) { console.error(e) }
     finally { setFetching(false) }
   }
