@@ -92,9 +92,9 @@ export default function ProfileScreen() {
         <View style={styles.statsRow}>
           {[
             { label: 'Toplam', value: stats.total, color: colors.accent },
-            { label: 'Bugun', value: stats.today, color: '#4ade80' },
+            { label: 'Bugün', value: stats.today, color: '#4ade80' },
             { label: 'Bu Hafta', value: stats.week, color: '#60a5fa' },
-            { label: 'Ogrenildi', value: stats.mastered, color: '#e879f9' },
+            { label: 'Öğrenildi', value: stats.mastered, color: '#e879f9' },
           ].map(s => (
             <View key={s.label} style={styles.statCard}>
               <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
@@ -105,7 +105,7 @@ export default function ProfileScreen() {
 
         {wordOfDay && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚡ Gunun Kelimesi</Text>
+            <Text style={styles.sectionTitle}>⚡ Günün Kelimesi</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <Text style={styles.wodWord}>{wordOfDay.word}</Text>
               {wordOfDay.cefr && (
@@ -144,7 +144,7 @@ export default function ProfileScreen() {
 
         {Object.keys(cefrDist).length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📊 CEFR Dagilimi</Text>
+            <Text style={styles.sectionTitle}>📊 CEFR Dağılımı</Text>
             {cefrOrder.filter(l => cefrDist[l]).map(level => (
               <View key={level} style={styles.cefrRow}>
                 <Text style={[styles.cefrLabel, { color: cefrColor[level] }]}>{level}</Text>
@@ -159,7 +159,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity style={styles.signOutBtn} onPress={() => supabase.auth.signOut()}>
           <Ionicons name="log-out-outline" size={20} color="#f87171" />
-          <Text style={styles.signOutText}>Cikis Yap</Text>
+          <Text style={styles.signOutText}>Çıkış Yap</Text>
         </TouchableOpacity>
 
       </ScrollView>

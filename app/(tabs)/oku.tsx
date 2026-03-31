@@ -127,7 +127,7 @@ export default function OkuScreen() {
             textAlignVertical="top"
           />
           <TouchableOpacity style={styles.processBtn} onPress={handleProcess}>
-            <Text style={styles.processBtnText}>Metni Isle</Text>
+            <Text style={styles.processBtnText}>Metni İşle</Text>
           </TouchableOpacity>
         </ScrollView>
       ) : (

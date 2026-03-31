@@ -57,9 +57,9 @@ export default function DashboardScreen() {
       <View style={styles.grid}>
         {[
           { label: 'Toplam Kelime', value: stats.total },
-          { label: 'Bugun', value: stats.today },
+          { label: 'Bugün', value: stats.today },
           { label: 'Bu Hafta', value: stats.week },
-          { label: 'Ogrenildi', value: stats.mastered },
+          { label: 'Öğrenildi', value: stats.mastered },
         ].map((s) => (
           <View key={s.label} style={styles.card}>
             <Text style={styles.cardValue}>{s.value}</Text>
@@ -84,7 +84,7 @@ export default function DashboardScreen() {
       )}
 
       <TouchableOpacity style={styles.signOutBtn} onPress={() => supabase.auth.signOut()}>
-        <Text style={styles.signOutText}>Cikis Yap</Text>
+        <Text style={styles.signOutText}>Çıkış Yap</Text>
       </TouchableOpacity>
     </ScrollView>
   )

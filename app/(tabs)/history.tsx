@@ -42,13 +42,13 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Okuma Gecmisi</Text>
+      <Text style={styles.title}>Okuma Geçmişi</Text>
       {loading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 48 }} />
       ) : history.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="book-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyText}>Henuz okuma gecmisiniz yok</Text>
+          <Text style={styles.emptyText}>Henüz okuma gecmisiniz yok</Text>
           <Text style={styles.emptySubText}>Makale okudukca buraya kaydedilir</Text>
         </View>
       ) : (

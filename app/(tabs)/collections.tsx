@@ -157,7 +157,7 @@ export default function CollectionsScreen() {
               autoFocus
             />
             <TouchableOpacity style={styles.createBtn} onPress={createCollection}>
-              <Text style={styles.createBtnText}>Olustur</Text>
+              <Text style={styles.createBtnText}>Oluştur</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

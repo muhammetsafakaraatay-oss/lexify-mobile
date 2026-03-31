@@ -79,7 +79,7 @@ export default function FlashcardsScreen() {
 
   if (words.length === 0) return (
     <View style={styles.center}>
-      <Text style={styles.emptyText}>Henuz kelime eklemediniz</Text>
+      <Text style={styles.emptyText}>Henüz kelime eklemediniz</Text>
     </View>
   )
 
@@ -96,7 +96,7 @@ export default function FlashcardsScreen() {
             setCurrent(0); setFlipped(false); setFinished(false)
             setResults({}); setStreak(0); flipAnim.setValue(0); loadWords()
           }}>
-            <Text style={styles.restartBtnText}>Tekrar Calis</Text>
+            <Text style={styles.restartBtnText}>Tekrar Çalış</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -124,7 +124,7 @@ export default function FlashcardsScreen() {
             <TouchableOpacity onPress={() => Speech.speak(word.word, { language: 'en-US', rate: 0.8 })} style={styles.speakBtn}>
               <Text style={styles.speakText}>🔊</Text>
             </TouchableOpacity>
-            <Text style={styles.tapHint}>Cevirmek icin dokun</Text>
+            <Text style={styles.tapHint}>Çevirmek için dokun</Text>
           </Animated.View>
 
           <Animated.View style={[styles.card, styles.cardBack, { opacity: backOpacity, transform: [{ rotateY: backRotate }] }]}>
