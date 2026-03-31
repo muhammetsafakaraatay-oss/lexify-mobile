@@ -27,6 +27,10 @@ export default function TabsLayout() {
         title: 'Kelimeler',
         tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} />
       }} />
+      <Tabs.Screen name="collections" options={{
+        title: 'Listeler',
+        tabBarIcon: ({ color, size }) => <Ionicons name="folder-outline" size={size} color={color} />
+      }} />
       <Tabs.Screen name="dashboard" options={{
         title: 'Dashboard',
         tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart-outline" size={size} color={color} />
