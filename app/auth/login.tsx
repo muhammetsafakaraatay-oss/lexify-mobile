@@ -1,25 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
-import * as Linking from 'expo-linking'
 import { makeRedirectUri } from 'expo-auth-session'
 import { supabase } from '../../lib/supabase'
 import { colors } from '../../lib/theme'
+import { useRouter } from 'expo-router'
 
 WebBrowser.maybeCompleteAuthSession()
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    const sub = Linking.addEventListener('url', ({ url }) => {
-      if (url.includes('code=')) {
-        const code = new URL(url).searchParams.get('code')
-        if (code) supabase.auth.exchangeCodeForSession(code)
-      }
-    })
-    return () => sub.remove()
-  }, [])
+  const router = useRouter()
 
   async function signInWithGoogle() {
     console.log('Button pressed')
@@ -34,18 +25,24 @@ export default function LoginScreen() {
           skipBrowserRedirect: true,
         },
       })
-      if (error) { console.error(error); return }
+      if (error) throw error
       if (data.url) {
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri)
         console.log('Auth result:', result.type)
-        if (result.type === 'success') {
-          const url = new URL(result.url)
-          const code = url.searchParams.get('code')
-          if (code) await supabase.auth.exchangeCodeForSession(code)
+          if (result.type === 'success') {
+          const hash = result.url.split('#')[1] || ''
+          const params = new URLSearchParams(hash)
+          const access_token = params.get('access_token')
+          const refresh_token = params.get('refresh_token') || ''
+          console.log('access_token:', access_token ? 'found' : 'null')
+          if (access_token) {
+            await supabase.auth.setSession({ access_token, refresh_token })
+            router.replace('/(tabs)/dashboard')
+          }
         }
       }
     } catch (e) {
-      console.error(e)
+      console.error('Error:', e)
     } finally {
       setLoading(false)
     }
@@ -57,11 +54,11 @@ export default function LoginScreen() {
         <Text style={styles.logoText}>LexiTR</Text>
         <View style={styles.dot} />
       </View>
-      <Text style={styles.subtitle}>İngilizce okurken kelime öğren</Text>
+      <Text style={styles.subtitle}>Ingilizce okurken kelime ogren</Text>
       <TouchableOpacity style={styles.btn} onPress={signInWithGoogle} disabled={loading}>
         {loading
           ? <ActivityIndicator color={colors.bg} />
-          : <Text style={styles.btnText}>Google ile Giriş Yap</Text>
+          : <Text style={styles.btnText}>Google ile Giris Yap</Text>
         }
       </TouchableOpacity>
     </View>
