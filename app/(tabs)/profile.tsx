@@ -5,17 +5,19 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+import { useRouter } from 'expo-router'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0 })
+  const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0, streak: 0 })
   const [cefrDist, setCefrDist] = useState<Record<string, number>>({})
   const [recentWords, setRecentWords] = useState<any[]>([])
   const [recentHistory, setRecentHistory] = useState<any[]>([])
   const [wordOfDay, setWordOfDay] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   const cefrColor: Record<string, string> = {
     A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
@@ -42,11 +44,26 @@ export default function ProfileScreen() {
     const dist: Record<string, number> = {}
     words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
 
+    // Streak hesapla
+    let streak = 0
+    const sortedDates = [...new Set(words.map((w: any) => w.created_at.split('T')[0]))].sort().reverse()
+    const todayStr = new Date().toISOString().split('T')[0]
+    let checkDate = todayStr
+    for (const date of sortedDates) {
+      if (date === checkDate) {
+        streak++
+        const d = new Date(checkDate)
+        d.setDate(d.getDate() - 1)
+        checkDate = d.toISOString().split('T')[0]
+      } else break
+    }
+
     setStats({
       total: words.length,
       mastered: words.filter((w: any) => w.mastered).length,
       today: todayRes.count || 0,
       week: weekRes.count || 0,
+      streak,
     })
     setCefrDist(dist)
     setRecentWords(words.filter((w: any) => !w.mastered).sort((a: any, b: any) => a.review_count - b.review_count).slice(0, 3))
@@ -91,10 +108,10 @@ export default function ProfileScreen() {
 
         <View style={styles.statsRow}>
           {[
-            { label: 'Toplam', value: stats.total, color: colors.accent },
+            { label: '🔥 Seri', value: stats.streak, color: '#fb923c' },
+          { label: 'Toplam', value: stats.total, color: colors.accent },
             { label: 'Bugün', value: stats.today, color: '#4ade80' },
-            { label: 'Bu Hafta', value: stats.week, color: '#60a5fa' },
-            { label: 'Öğrenildi', value: stats.mastered, color: '#e879f9' },
+              { label: 'Öğrenildi', value: stats.mastered, color: '#e879f9' },
           ].map(s => (
             <View key={s.label} style={styles.statCard}>
               <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
@@ -157,6 +174,22 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>⚙️ Ayarlar</Text>
+          <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/(tabs)/collections')}>
+            <Text style={styles.settingText}>📁 Listelerim</Text>
+            <Text style={{ color: colors.textMuted }}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/(tabs)/history')}>
+            <Text style={styles.settingText}>📖 Okuma Geçmişi</Text>
+            <Text style={{ color: colors.textMuted }}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingRow} onPress={() => router.push('/(tabs)/search')}>
+            <Text style={styles.settingText}>🔍 Kelime Ara</Text>
+            <Text style={{ color: colors.textMuted }}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity style={styles.signOutBtn} onPress={() => supabase.auth.signOut()}>
           <Ionicons name="log-out-outline" size={20} color="#f87171" />
           <Text style={styles.signOutText}>Çıkış Yap</Text>
@@ -200,4 +233,6 @@ const styles = StyleSheet.create({
   cefrCount: { width: 20, fontSize: 11, color: colors.textMuted, textAlign: 'right' },
   signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#f87171', borderRadius: 12, padding: 14, justifyContent: 'center', marginTop: 4 },
   signOutText: { color: '#f87171', fontWeight: '600', fontSize: 15 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  settingText: { color: colors.text, fontSize: 15 },
 })

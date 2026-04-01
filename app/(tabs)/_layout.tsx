@@ -14,14 +14,14 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
       <Tabs.Screen name="history" options={{ href: null }} />
-      <Tabs.Screen name="catalog" options={{ title: 'Kesfet', tabBarIcon: ({ color, size }) => <Ionicons name="compass-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="oku" options={{ title: 'Oku', tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="flashcards" options={{ title: 'Kartlar', tabBarIcon: ({ color, size }) => <Ionicons name="layers-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="words" options={{ title: 'Kelimeler', tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="search" options={{ title: 'Ara', tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="search" options={{ href: null }} />
+      <Tabs.Screen name="collections" options={{ href: null }} />
       <Tabs.Screen name="quiz" options={{ href: null }} />
+      <Tabs.Screen name="catalog" options={{ title: 'Keşfet', tabBarIcon: ({ color, size }) => <Ionicons name="compass-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="oku" options={{ title: 'Oku', tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="words" options={{ title: 'Kelimeler', tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="flashcards" options={{ href: null }} />
       <Tabs.Screen name="video" options={{ title: 'Video', tabBarIcon: ({ color, size }) => <Ionicons name="play-circle-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="collections" options={{ title: 'Listeler', tabBarIcon: ({ color, size }) => <Ionicons name="folder-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} /> }} />
     </Tabs>
   )

@@ -12,11 +12,11 @@ export default function WordsScreen() {
   const [words, setWords] = useState<any[]>([])
   const [filtered, setFiltered] = useState<any[]>([])
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('Tümü')
   const [loading, setLoading] = useState(true)
 
   const router = useRouter()
-  const cefrLevels = ['all', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+  const cefrLevels = ['Tümü', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
   const cefrColor: Record<string, string> = {
     A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
   }
@@ -33,7 +33,7 @@ export default function WordsScreen() {
       w.word.toLowerCase().includes(search.toLowerCase()) ||
       w.translation?.toLowerCase().includes(search.toLowerCase())
     )
-    if (filter !== 'all') result = result.filter(w => w.cefr === filter)
+    if (filter !== 'Tümü') result = result.filter(w => w.cefr === filter)
     setFiltered(result)
   }, [words, search, filter])
 
@@ -59,9 +59,14 @@ export default function WordsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 20 }}>
         <Text style={styles.title}>Kelimelerim</Text>
-        <TouchableOpacity style={styles.quizBtn} onPress={() => router.push('/(tabs)/quiz')}>
-          <Text style={styles.quizBtnText}>🎮 Quiz</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.quizBtn} onPress={() => router.push('/(tabs)/flashcards')}>
+            <Text style={styles.quizBtnText}>🃏 Kart</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quizBtn} onPress={() => router.push('/(tabs)/quiz')}>
+            <Text style={styles.quizBtnText}>🎮 Quiz</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <TextInput

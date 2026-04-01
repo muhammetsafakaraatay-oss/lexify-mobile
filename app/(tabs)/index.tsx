@@ -2,22 +2,23 @@ import { useEffect } from 'react'
 import { useRouter } from 'expo-router'
 import { View } from 'react-native'
 import { supabase } from '../../lib/supabase'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export default function Index() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/(tabs)/dashboard')
+    async function check() {
+      const onboarded = await AsyncStorage.getItem('onboarding_done')
+      if (!onboarded) {
+        router.replace('/onboarding')
+        return
+      }
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) router.replace('/(tabs)/catalog')
       else router.replace('/auth/login')
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) router.replace('/(tabs)/dashboard')
-      else router.replace('/auth/login')
-    })
-
-    return () => subscription.unsubscribe()
+    }
+    check()
   }, [])
 
   return <View style={{ flex: 1, backgroundColor: '#080808' }} />

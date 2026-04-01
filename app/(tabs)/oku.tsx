@@ -66,9 +66,13 @@ export default function OkuScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      // Başlık çıkar
+      let title = articleUrl
+      const titleMatch = text.match(/^([^.!?]{10,100})[.!?]/)
+      if (titleMatch) title = titleMatch[1].trim()
       await supabase.from('reading_history').insert({
         user_id: user.id, url: articleUrl,
-        title: articleUrl, word_count: text.split(' ').length,
+        title: title, word_count: text.split(' ').length,
       })
     } catch (e) {}
   }
