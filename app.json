@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "lexitr-mobile",
-    "slug": "lexitr-mobile",
+    "name": "Lexify",
+    "slug": "lexify",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.lexitr-mobile",
+      "bundleIdentifier": "com.lexify.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Kitap ve metinlerdeki kelimeleri taramak i\u00e7in kamera kullan\u0131l\u0131r.",
         "NSPhotoLibraryUsageDescription": "Galeriden resim se\u00e7mek i\u00e7in kullan\u0131l\u0131r."

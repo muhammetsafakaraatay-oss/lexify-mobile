@@ -142,7 +142,7 @@ export default function OkuScreen() {
     <SafeAreaView style={styles.container}>
       {!ready ? (
         <ScrollView contentContainerStyle={styles.inputArea}>
-          <Text style={styles.title}>LexiTR<Text style={{ color: colors.accent }}>.</Text></Text>
+          <Text style={styles.title}>Lexify<Text style={{ color: colors.accent }}>.</Text></Text>
           <View style={styles.urlRow}>
             <TextInput
               style={styles.urlInput}

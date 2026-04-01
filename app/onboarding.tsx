@@ -26,7 +26,7 @@ const slides = [
   {
     emoji: '🚀',
     title: 'Hadi Başlayalım!',
-    desc: 'LexiTR ile İngilizce öğrenmek hiç bu kadar kolay olmamıştı.',
+    desc: 'Lexify ile İngilizce öğrenmek hiç bu kadar kolay olmamıştı.',
   },
 ]
 

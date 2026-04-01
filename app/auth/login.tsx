@@ -51,7 +51,7 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.logo}>
-        <Text style={styles.logoText}>LexiTR</Text>
+        <Text style={styles.logoText}>Lexify</Text>
         <View style={styles.dot} />
       </View>
       <Text style={styles.subtitle}>Ingilizce okurken kelime ogren</Text>
