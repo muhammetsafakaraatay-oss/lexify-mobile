@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, SafeAreaView, ActivityIndicator
@@ -15,6 +15,7 @@ export default function WordsScreen() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
 
+  const router = useRouter()
   const cefrLevels = ['all', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
   const cefrColor: Record<string, string> = {
     A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
@@ -56,7 +57,12 @@ export default function WordsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Kelimelerim</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 20 }}>
+        <Text style={styles.title}>Kelimelerim</Text>
+        <TouchableOpacity style={styles.quizBtn} onPress={() => router.push('/(tabs)/quiz')}>
+          <Text style={styles.quizBtnText}>🎮 Quiz</Text>
+        </TouchableOpacity>
+      </View>
 
       <TextInput
         style={styles.search}
@@ -137,6 +143,8 @@ const styles = StyleSheet.create({
   filterText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: colors.textMuted, fontSize: 16 },
+  quizBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  quizBtnText: { color: colors.bg, fontWeight: '700', fontSize: 13 },
   wordCard: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border },
   wordMain: { flexDirection: 'row', alignItems: 'flex-start' },
   word: { fontSize: 18, fontWeight: '700', color: colors.text },
