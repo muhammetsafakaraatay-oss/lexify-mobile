@@ -14,7 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.lexitr-mobile"
+      "bundleIdentifier": "com.anonymous.lexitr-mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kitap ve metinlerdeki kelimeleri taramak i\u00e7in kamera kullan\u0131l\u0131r.",
+        "NSPhotoLibraryUsageDescription": "Galeriden resim se\u00e7mek i\u00e7in kullan\u0131l\u0131r."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -29,7 +33,15 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
     ],
     "scheme": "lexitr"
   }
