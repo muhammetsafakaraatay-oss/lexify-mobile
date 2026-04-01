@@ -14,6 +14,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
       <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="catalog" options={{ title: 'Kesfet', tabBarIcon: ({ color, size }) => <Ionicons name="compass-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="oku" options={{ title: 'Oku', tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="flashcards" options={{ title: 'Kartlar', tabBarIcon: ({ color, size }) => <Ionicons name="layers-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="words" options={{ title: 'Kelimeler', tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} /> }} />

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, SafeAreaView, Modal, Pressable
@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { translateWord, fetchArticle } from '../../lib/api'
 import { colors } from '../../lib/theme'
 import * as Speech from 'expo-speech'
+import { useLocalSearchParams } from 'expo-router'
 
 function tokenize(text: string) {
   const out: { word: boolean; val: string }[] = []
@@ -28,6 +29,33 @@ export default function OkuScreen() {
   const [tip, setTip] = useState<any>(null)
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const cache = useRef<Record<string, any>>({})
+  const params = useLocalSearchParams()
+
+  useEffect(() => {
+    if (params.prefillUrl) {
+      setUrl(params.prefillUrl as string)
+      handleFetchArticleFromUrl(params.prefillUrl as string)
+    }
+  }, [params.prefillUrl])
+
+  async function handleFetchArticleFromUrl(articleUrl: string) {
+    setFetching(true)
+    try {
+      const isYoutube = articleUrl.includes('youtube.com') || articleUrl.includes('youtu.be')
+      const endpoint = isYoutube ? '/api/youtube-transcript' : '/api/fetch-article'
+      const res = await fetch('https://lexitr.vercel.app' + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: articleUrl }),
+      })
+      const data = await res.json()
+      if (data.text) {
+        setInput(data.text)
+        await saveHistory(articleUrl, data.text)
+      }
+    } catch (e) {}
+    finally { setFetching(false) }
+  }
 
   const cefrHighlight: Record<string, string> = {
     C2: 'rgba(250,204,21,0.5)', C1: 'rgba(250,204,21,0.3)',
