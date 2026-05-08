@@ -4,34 +4,23 @@ import {
   TextInput, ActivityIndicator
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../../lib/supabase'
+import { listSavedWords, SavedWord } from '../../lib/data'
+import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 import * as Speech from 'expo-speech'
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<any[]>([])
+  const [results, setResults] = useState<SavedWord[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
-
-  const cefrColor: Record<string, string> = {
-    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
-  }
 
   async function handleSearch() {
     if (!query.trim()) return
     setLoading(true)
     setSearched(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data } = await supabase
-      .from('saved_words')
-      .select('*')
-      .eq('user_id', user.id)
-      .or(`word.ilike.%${query}%,translation.ilike.%${query}%`)
-      .order('created_at', { ascending: false })
-    setResults(data || [])
+    setResults(await listSavedWords({ search: query, orderBy: 'created_at', ascending: false }))
     setLoading(false)
   }
 
@@ -72,8 +61,8 @@ export default function SearchScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <Text style={styles.word}>{item.word}</Text>
                     {item.cefr && (
-                      <View style={[styles.cefrBadge, { borderColor: cefrColor[item.cefr] || colors.border }]}>
-                        <Text style={[styles.cefrText, { color: cefrColor[item.cefr] || colors.textMuted }]}>{item.cefr}</Text>
+                      <View style={[styles.cefrBadge, { borderColor: cefrColors[item.cefr] || colors.border }]}>
+                        <Text style={[styles.cefrText, { color: cefrColors[item.cefr] || colors.textMuted }]}>{item.cefr}</Text>
                       </View>
                     )}
                     {item.mastered && <Text style={{ color: '#4ade80', fontSize: 14 }}>✓</Text>}

@@ -3,16 +3,15 @@ import * as Speech from 'expo-speech'
 
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Easing } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../../lib/supabase'
+import { listUniqueSavedWords, SavedWord } from '../../lib/data'
 import { colors } from '../../lib/theme'
 
-interface Word { id: string; word: string; translation: string }
-interface Slot { word: Word; key: string; side: 'en' | 'tr' }
+interface Slot { word: SavedWord; key: string; side: 'en' | 'tr' }
 
 const SLOT_COUNT = 6
 
 export default function QuizScreen() {
-  const [allWords, setAllWords] = useState<Word[]>([])
+  const [allWords, setAllWords] = useState<SavedWord[]>([])
   const [loading, setLoading] = useState(true)
   const [enSlots, setEnSlots] = useState<(Slot | null)[]>(Array(SLOT_COUNT).fill(null))
   const [trSlots, setTrSlots] = useState<(Slot | null)[]>(Array(SLOT_COUNT).fill(null))
@@ -36,11 +35,8 @@ export default function QuizScreen() {
   useEffect(() => { loadWords() }, [])
 
   async function loadWords() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data } = await supabase.from('saved_words').select('*').eq('user_id', user.id).order('review_count', { ascending: true }).limit(30)
-    if (data && data.length >= 4) {
-      const unique = data.filter((w, i, arr) => arr.findIndex(x => x.word.toLowerCase() === w.word.toLowerCase()) === i)
+    const unique = await listUniqueSavedWords({ orderBy: 'review_count', ascending: true, limit: 30 })
+    if (unique.length >= 4) {
       setAllWords(unique)
       setTotalWords(unique.length)
       initSlots(unique, new Set())
@@ -48,7 +44,7 @@ export default function QuizScreen() {
     setLoading(false)
   }
 
-  function initSlots(words: Word[], used: Set<string>) {
+  function initSlots(words: SavedWord[], used: Set<string>) {
     const available = words.filter(w => !used.has(w.id))
     const picked = [...available].sort(() => Math.random() - 0.5).slice(0, SLOT_COUNT)
     const enArr: (Slot | null)[] = Array(SLOT_COUNT).fill(null)

@@ -4,22 +4,19 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, SafeAreaView, ActivityIndicator
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { deleteSavedWord, listUniqueSavedWords, SavedWord } from '../../lib/data'
+import { cefrColors, cefrLevels } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import * as Speech from 'expo-speech'
 
 export default function WordsScreen() {
-  const [words, setWords] = useState<any[]>([])
-  const [filtered, setFiltered] = useState<any[]>([])
+  const [words, setWords] = useState<SavedWord[]>([])
+  const [filtered, setFiltered] = useState<SavedWord[]>([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('Tümü')
   const [loading, setLoading] = useState(true)
 
   const router = useRouter()
-  const cefrLevels = ['Tümü', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
-  const cefrColor: Record<string, string> = {
-    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
-  }
 
   useEffect(() => { loadWords() }, [])
 
@@ -38,20 +35,12 @@ export default function WordsScreen() {
   }, [words, search, filter])
 
   async function loadWords() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data } = await supabase
-      .from('saved_words').select('*').eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-    const unique = (data || []).filter((w, i, arr) =>
-      arr.findIndex(x => x.word.toLowerCase() === w.word.toLowerCase()) === i
-    )
-    setWords(unique)
+    setWords(await listUniqueSavedWords({ orderBy: 'created_at', ascending: false }))
     setLoading(false)
   }
 
   async function deleteWord(id: string) {
-    await supabase.from('saved_words').delete().eq('id', id)
+    await deleteSavedWord(id)
     setWords(p => p.filter(w => w.id !== id))
   }
 
@@ -112,12 +101,13 @@ export default function WordsScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <Text style={styles.word}>{item.word}</Text>
                     {item.cefr && (
-                      <View style={[styles.cefrBadge, { borderColor: cefrColor[item.cefr] || colors.border }]}>
-                        <Text style={[styles.cefrText, { color: cefrColor[item.cefr] || colors.textMuted }]}>{item.cefr}</Text>
+                      <View style={[styles.cefrBadge, { borderColor: cefrColors[item.cefr] || colors.border }]}>
+                        <Text style={[styles.cefrText, { color: cefrColors[item.cefr] || colors.textMuted }]}>{item.cefr}</Text>
                       </View>
                     )}
                     {item.mastered && <Text style={styles.masteredBadge}>✓</Text>}
                   </View>
+                  {item.ipa ? <Text style={styles.ipa}>{item.ipa}</Text> : null}
                   <Text style={styles.translation}>{item.translation}</Text>
                 </View>
                 <View style={styles.actions}>
@@ -130,6 +120,7 @@ export default function WordsScreen() {
                 </View>
               </View>
               {item.context ? <Text style={styles.context} numberOfLines={2}>{item.context}</Text> : null}
+              {item.source_title ? <Text style={styles.source} numberOfLines={1}>{item.source_title}</Text> : null}
             </View>
           )}
         />
@@ -156,8 +147,10 @@ const styles = StyleSheet.create({
   cefrBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   cefrText: { fontSize: 10, fontWeight: '700' },
   masteredBadge: { color: '#4ade80', fontSize: 14 },
+  ipa: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
   translation: { color: colors.accent, fontSize: 14, marginTop: 2 },
   actions: { flexDirection: 'row', gap: 8 },
   actionBtn: { fontSize: 20 },
   context: { color: colors.textMuted, fontSize: 12, marginTop: 6, lineHeight: 18 },
+  source: { color: colors.textDim, fontSize: 11, marginTop: 6 },
 })

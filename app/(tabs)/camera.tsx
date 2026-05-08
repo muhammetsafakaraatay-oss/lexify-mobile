@@ -1,53 +1,32 @@
 import { useState, useRef } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, ScrollView, Modal, Pressable
+  ActivityIndicator, ScrollView
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
-import { supabase } from '../../lib/supabase'
-import { translateWord } from '../../lib/api'
+import { WordTipSheet } from '../../components/WordTipSheet'
+import { processOcr } from '../../lib/api'
+import { useWordTip } from '../../hooks/useWordTip'
 import { colors } from '../../lib/theme'
-import * as Speech from 'expo-speech'
-
-function tokenize(text: string) {
-  const out: { word: boolean; val: string }[] = []
-  const re = /([a-zA-Z]+)|([^a-zA-Z]+)/g
-  let m
-  while ((m = re.exec(text)) !== null) {
-    if (m[1]) out.push({ word: true, val: m[1] })
-    else out.push({ word: false, val: m[2] })
-  }
-  return out
-}
+import { TextToken, tokenizeText } from '../../lib/tokenize'
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions()
   const [mode, setMode] = useState<'camera' | 'result'>('camera')
   const [processing, setProcessing] = useState(false)
-  const [tokens, setTokens] = useState<{ word: boolean; val: string }[]>([])
-  const [tip, setTip] = useState<any>(null)
-  const [saved, setSaved] = useState<Record<string, boolean>>({})
+  const [tokens, setTokens] = useState<TextToken[]>([])
   const cameraRef = useRef<CameraView>(null)
-  const cache = useRef<Record<string, any>>({})
-
-  const cefrColor: Record<string, string> = {
-    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
-  }
+  const { tip, isSaved, openWordTip, saveTip, closeTip } = useWordTip()
 
   async function processImage(base64: string, uri?: string) {
     setProcessing(true)
     try {
-      const res = await fetch('https://lexitr.vercel.app/api/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 }),
-      })
-      const data = await res.json()
+      const data = await processOcr(base64)
       if (data.text?.trim()) {
-        setTokens(tokenize(data.text))
+        setTokens(tokenizeText(data.text))
         setMode('result')
       }
     } catch (e) { console.error(e) }
@@ -71,27 +50,6 @@ export default function CameraScreen() {
     if (!result.canceled && result.assets[0].uri) {
       await processImage(result.assets[0].base64 || '', result.assets[0].uri)
     }
-  }
-
-  async function handleWordPress(word: string) {
-    const k = word.toLowerCase()
-    if (cache.current[k]) { setTip({ word, ...cache.current[k] }); return }
-    setTip({ word, loading: true })
-    const data = await translateWord(word, word)
-    cache.current[k] = data
-    setTip({ word, ...data })
-  }
-
-  async function handleSave() {
-    if (!tip) return
-    const k = tip.word.toLowerCase()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    await supabase.from('saved_words').upsert({
-      user_id: user.id, word: tip.word,
-      translation: tip.tr, context: tip.context, cefr: tip.cefr
-    }, { onConflict: 'user_id,word' })
-    setSaved(p => ({ ...p, [k]: true }))
   }
 
   if (!permission) return <View style={styles.center}><ActivityIndicator color={colors.accent} /></View>
@@ -120,7 +78,7 @@ export default function CameraScreen() {
         <Text style={styles.readText}>
           {tokens.map((t, i) =>
             t.word ? (
-              <Text key={i} onPress={() => handleWordPress(t.val)} style={styles.word}>{t.val}</Text>
+              <Text key={i} onPress={() => openWordTip(t.val, t.val)} style={styles.word}>{t.val}</Text>
             ) : (
               <Text key={i} style={styles.punct}>{t.val}</Text>
             )
@@ -128,38 +86,12 @@ export default function CameraScreen() {
         </Text>
       </ScrollView>
 
-      <Modal visible={!!tip} transparent animationType="slide" onRequestClose={() => setTip(null)}>
-        <Pressable style={styles.modalBg} onPress={() => setTip(null)}>
-          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-            {tip?.loading ? (
-              <ActivityIndicator color={colors.accent} style={{ margin: 32 }} />
-            ) : tip ? (
-              <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <Text style={styles.sheetWord}>{tip.word}</Text>
-                  {tip.cefr && (
-                    <View style={[styles.cefrBadge, { borderColor: cefrColor[tip.cefr] }]}>
-                      <Text style={[styles.cefrText, { color: cefrColor[tip.cefr] }]}>{tip.cefr}</Text>
-                    </View>
-                  )}
-                  <TouchableOpacity onPress={() => Speech.speak(tip.word, { language: 'en-US', rate: 0.8 })} style={{ marginLeft: 'auto' }}>
-                    <Text style={{ fontSize: 24 }}>🔊</Text>
-                  </TouchableOpacity>
-                </View>
-                {tip.ipa ? <Text style={styles.ipa}>{tip.ipa}</Text> : null}
-                <Text style={styles.translation}>{tip.tr}</Text>
-                {tip.context ? <Text style={styles.context}>{tip.context}</Text> : null}
-                <TouchableOpacity
-                  style={[styles.saveBtn, saved[tip.word?.toLowerCase()] && styles.saveBtnSaved]}
-                  onPress={handleSave}
-                >
-                  <Text style={styles.saveBtnText}>{saved[tip.word?.toLowerCase()] ? '✓ Kaydedildi' : '+ Kaydet'}</Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <WordTipSheet
+        tip={tip}
+        saved={isSaved}
+        onClose={closeTip}
+        onSave={() => saveTip()}
+      />
     </SafeAreaView>
   )
 
@@ -215,15 +147,4 @@ const styles = StyleSheet.create({
   permText: { color: colors.text, fontSize: 18, marginBottom: 16 },
   permBtn: { backgroundColor: colors.accent, borderRadius: 12, padding: 14, paddingHorizontal: 24 },
   permBtnText: { color: colors.bg, fontWeight: '700' },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#111', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24 },
-  sheetWord: { fontSize: 26, fontWeight: '800', color: colors.text },
-  cefrBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  cefrText: { fontSize: 11, fontWeight: '700' },
-  ipa: { color: colors.textMuted, fontSize: 14, marginBottom: 6 },
-  translation: { fontSize: 20, color: colors.accent, fontWeight: '600', marginBottom: 8 },
-  context: { color: colors.textMuted, fontSize: 14, marginBottom: 12, lineHeight: 20 },
-  saveBtn: { backgroundColor: colors.accent, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
-  saveBtnSaved: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: colors.border },
-  saveBtnText: { color: colors.bg, fontWeight: '700', fontSize: 15 },
 })

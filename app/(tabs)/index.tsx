@@ -15,7 +15,7 @@ export default function Index() {
         return
       }
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) router.replace('/(tabs)/catalog')
+      if (session) router.replace('/(tabs)/dashboard')
       else router.replace('/auth/login')
     }
     check()

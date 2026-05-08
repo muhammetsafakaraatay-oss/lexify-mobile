@@ -3,7 +3,15 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   SafeAreaView, ActivityIndicator, Modal, TextInput, Pressable, Alert
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import {
+  createCollection as createCollectionRecord,
+  deleteCollectionById,
+  listCollections,
+  listSavedWords,
+  listWordsForCollection,
+  SavedWord,
+} from '../../lib/data'
+import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -19,33 +27,26 @@ export default function CollectionsScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [newName, setNewName] = useState('')
   const [selected, setSelected] = useState<any>(null)
-  const [words, setWords] = useState<any[]>([])
+  const [words, setWords] = useState<SavedWord[]>([])
   const [wordsLoading, setWordsLoading] = useState(false)
 
   useEffect(() => { loadCollections() }, [])
 
   async function loadCollections() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data } = await supabase.from('collections').select('*').eq('user_id', user.id)
-    setCollections(data || [])
+    setCollections(await listCollections())
     setLoading(false)
   }
 
   async function createCollection() {
     if (!newName.trim()) return
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase.from('collections').insert({
-      user_id: user.id, name: newName.trim()
-    }).select().single()
+    const data = await createCollectionRecord(newName.trim())
     if (data) setCollections(p => [...p, data])
     setNewName('')
     setModalVisible(false)
   }
 
   async function deleteCollection(id: string) {
-    await supabase.from('collections').delete().eq('id', id)
+    await deleteCollectionById(id)
     setCollections(p => p.filter(c => c.id !== id))
     if (selected?.id === id) setSelected(null)
   }
@@ -54,21 +55,11 @@ export default function CollectionsScreen() {
     setSelected(col)
     setWordsLoading(true)
     if (['favorites', 'later', 'hard'].includes(col.id)) {
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data } = await supabase.from('saved_words').select('*').eq('user_id', user!.id)
-      setWords(data || [])
+      setWords(await listSavedWords())
     } else {
-      const { data } = await supabase
-        .from('collection_words')
-        .select('word_id, saved_words(*)')
-        .eq('collection_id', col.id)
-      setWords((data || []).map((d: any) => d.saved_words).filter(Boolean))
+      setWords(await listWordsForCollection(col.id))
     }
     setWordsLoading(false)
-  }
-
-  const cefrColor: Record<string, string> = {
-    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
   }
 
   const allCollections = [...DEFAULT_COLLECTIONS, ...collections]
@@ -99,8 +90,8 @@ export default function CollectionsScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={styles.word}>{item.word}</Text>
                   {item.cefr && (
-                    <View style={[styles.cefrBadge, { borderColor: cefrColor[item.cefr] || colors.border }]}>
-                      <Text style={[styles.cefrText, { color: cefrColor[item.cefr] || colors.textMuted }]}>{item.cefr}</Text>
+                    <View style={[styles.cefrBadge, { borderColor: cefrColors[item.cefr] || colors.border }]}>
+                      <Text style={[styles.cefrText, { color: cefrColors[item.cefr] || colors.textMuted }]}>{item.cefr}</Text>
                     </View>
                   )}
                 </View>

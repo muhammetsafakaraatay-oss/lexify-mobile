@@ -6,6 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { useRouter } from 'expo-router'
+import { getWordOfDay } from '../../lib/api'
+import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -18,10 +20,6 @@ export default function ProfileScreen() {
   const [wordOfDay, setWordOfDay] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-
-  const cefrColor: Record<string, string> = {
-    A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
-  }
 
   useEffect(() => { load() }, [])
 
@@ -70,8 +68,7 @@ export default function ProfileScreen() {
     setRecentHistory(historyRes.data || [])
 
     try {
-      const res = await fetch('https://lexitr.vercel.app/api/word-of-day')
-      setWordOfDay(await res.json())
+      setWordOfDay(await getWordOfDay())
     } catch (e) {}
 
     setLoading(false)
@@ -126,8 +123,8 @@ export default function ProfileScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <Text style={styles.wodWord}>{wordOfDay.word}</Text>
               {wordOfDay.cefr && (
-                <View style={[styles.cefrBadge, { borderColor: cefrColor[wordOfDay.cefr] || colors.border }]}>
-                  <Text style={[styles.cefrText, { color: cefrColor[wordOfDay.cefr] || colors.textMuted }]}>{wordOfDay.cefr}</Text>
+                <View style={[styles.cefrBadge, { borderColor: cefrColors[wordOfDay.cefr] || colors.border }]}>
+                  <Text style={[styles.cefrText, { color: cefrColors[wordOfDay.cefr] || colors.textMuted }]}>{wordOfDay.cefr}</Text>
                 </View>
               )}
             </View>
@@ -164,9 +161,9 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>📊 CEFR Dağılımı</Text>
             {cefrOrder.filter(l => cefrDist[l]).map(level => (
               <View key={level} style={styles.cefrRow}>
-                <Text style={[styles.cefrLabel, { color: cefrColor[level] }]}>{level}</Text>
+                <Text style={[styles.cefrLabel, { color: cefrColors[level] }]}>{level}</Text>
                 <View style={styles.barBg}>
-                  <View style={[styles.barFill, { width: ((cefrDist[level] / maxCefr) * 100) + '%' as any, backgroundColor: cefrColor[level] }]} />
+                  <View style={[styles.barFill, { width: ((cefrDist[level] / maxCefr) * 100) + '%' as any, backgroundColor: cefrColors[level] }]} />
                 </View>
                 <Text style={styles.cefrCount}>{cefrDist[level]}</Text>
               </View>

@@ -12,7 +12,7 @@ export default function TabsLayout() {
       tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
     }}>
       <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="dashboard" options={{ href: null }} />
+      <Tabs.Screen name="dashboard" options={{ title: 'Ana Sayfa', tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen name="collections" options={{ href: null }} />
@@ -21,8 +21,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="oku" options={{ title: 'Oku', tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="words" options={{ title: 'Kelimeler', tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="flashcards" options={{ href: null }} />
-      <Tabs.Screen name="camera" options={{ title: 'Kamera', tabBarIcon: ({ color, size }) => <Ionicons name="camera-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="video" options={{ title: 'Video', tabBarIcon: ({ color, size }) => <Ionicons name="play-circle-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="camera" options={{ href: null }} />
+      <Tabs.Screen name="video" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} /> }} />
     </Tabs>
   )

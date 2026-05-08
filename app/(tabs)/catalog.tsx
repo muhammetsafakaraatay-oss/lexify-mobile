@@ -5,6 +5,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { getArticles } from '../../lib/api'
+import { cefrColors, cefrLevels } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 
 interface Article {
@@ -16,12 +18,6 @@ interface Article {
   description: string
   image_url: string
 }
-
-const cefrColor: Record<string, string> = {
-  A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
-}
-
-const levels = ['Tümü', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 
 export default function CatalogScreen() {
   const [articles, setArticles] = useState<Article[]>([])
@@ -39,8 +35,7 @@ export default function CatalogScreen() {
 
   async function loadArticles() {
     try {
-      const res = await fetch('https://lexitr.vercel.app/api/articles')
-      const data = await res.json()
+      const data = await getArticles()
       setArticles(data.articles || [])
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -55,7 +50,7 @@ export default function CatalogScreen() {
       <Text style={styles.title}>Keşfet</Text>
 
       <FlatList
-        data={levels}
+        data={cefrLevels}
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterList}
@@ -84,8 +79,8 @@ export default function CatalogScreen() {
             <TouchableOpacity style={styles.card} onPress={() => handleArticle(item)}>
               <View style={styles.cardContent}>
                 <View style={styles.cardMeta}>
-                  <View style={[styles.cefrBadge, { borderColor: cefrColor[item.cefr_level] || colors.border }]}>
-                    <Text style={[styles.cefrText, { color: cefrColor[item.cefr_level] || colors.textMuted }]}>{item.cefr_level}</Text>
+                  <View style={[styles.cefrBadge, { borderColor: cefrColors[item.cefr_level] || colors.border }]}>
+                    <Text style={[styles.cefrText, { color: cefrColors[item.cefr_level] || colors.textMuted }]}>{item.cefr_level}</Text>
                   </View>
                   <Text style={styles.source}>{item.source}</Text>
                 </View>

@@ -3,41 +3,25 @@ import {
   View, Text, StyleSheet, FlatList,
   SafeAreaView, ActivityIndicator, TouchableOpacity
 } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { deleteReadingHistoryItem, listReadingHistory, ReadingHistoryItem } from '../../lib/data'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
+import { timeAgoTr } from '../../lib/time'
 
 export default function HistoryScreen() {
-  const [history, setHistory] = useState<any[]>([])
+  const [history, setHistory] = useState<ReadingHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data } = await supabase
-      .from('reading_history')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-    setHistory(data || [])
+    setHistory(await listReadingHistory())
     setLoading(false)
   }
 
   async function deleteItem(id: string) {
-    await supabase.from('reading_history').delete().eq('id', id)
+    await deleteReadingHistoryItem(id)
     setHistory(p => p.filter(h => h.id !== id))
-  }
-
-  function timeAgo(date: string) {
-    const diff = Date.now() - new Date(date).getTime()
-    const days = Math.floor(diff / 86400000)
-    const hours = Math.floor(diff / 3600000)
-    const mins = Math.floor(diff / 60000)
-    if (days > 0) return days + ' gun once'
-    if (hours > 0) return hours + ' saat once'
-    return mins + ' dk once'
   }
 
   return (
@@ -65,7 +49,7 @@ export default function HistoryScreen() {
                   </Text>
                   <View style={styles.meta}>
                     <Ionicons name="time-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.metaText}>{timeAgo(item.created_at)}</Text>
+                    <Text style={styles.metaText}>{timeAgoTr(item.created_at)}</Text>
                   </View>
                 </View>
                 <TouchableOpacity onPress={() => deleteItem(item.id)} style={styles.deleteBtn}>
