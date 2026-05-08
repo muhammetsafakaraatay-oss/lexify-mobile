@@ -1,0 +1,334 @@
+# Replit Prompt — Sprint 2: Alışkanlık Döngüsü (Onboarding + Streak + Push Notifications)
+
+> Bunu Replit Agent'a (veya Cursor / Claude Code'a) olduğu gibi yapıştır.
+> Sprint 1'in (SRS motoru) üzerine inşa edilir; o sprint'in `lib/srs.ts`, `lib/data.ts` (gradeWord, listDueWords, getDueCount), yeni `flashcards.tsx` ve dashboard "Bugün Gözden Geçir" kartı zaten yerinde.
+
+---
+
+## ROLE
+
+Sen senior bir React Native + TypeScript geliştiricisin. Expo Router, Supabase, expo-notifications ve davranışsal ürün tasarımı (habit loop, retention) konularında uzmansın. Ürün hissini önemsersin: animasyon timing'i, ilk-açılış akışı ve mikro-yazılar (microcopy) işin parçası.
+
+## PROJE BAĞLAMI
+
+Lexify (paket adı: `lexitr-mobile`) — Türkiye'deki kullanıcılar için İngilizce öğrenme uygulaması. Expo SDK 54, Expo Router 6, Supabase auth + Postgres.
+
+**Sprint 1'de kuruldu (HAZIR):**
+- `lib/srs.ts` — SM-2 algoritması, `applyGrade`, `previewGradeLabel`, `nextDueLabel`, vs.
+- `lib/data.ts` — `gradeWord`, `listDueWords`, `listNewWords`, `getDueCount`, `srsStateOf`, genişletilmiş `SavedWord` tipi (ease, interval_days, repetitions, lapses, due_at, last_reviewed_at, stage).
+- `app/(tabs)/flashcards.tsx` — 4 buton (again/hard/good/easy), interval preview, leech uyarısı.
+- `app/(tabs)/dashboard.tsx` — "Bugün Gözden Geçir" sarı kartı (due/yeni/öğreniliyor sayıları).
+- Migration `supabase/migrations/0001_srs.sql` çalıştırıldı.
+- Jest + ts-jest kuruldu, 27 test geçiyor.
+
+**Sprint 1'in açık bıraktığı:**
+- Onboarding (`app/onboarding.tsx`) çok zayıf — kullanıcı seviye, ilgi, hedef bilgisi vermiyor.
+- "Streak" sayısı flashcard içinde local; gün-bazlı öğrenme serisi yok.
+- Hiç push notification yok — kullanıcı uygulamayı unutuyor.
+- Günlük hedef yok ("bugün 10 kelime kaydet" gibi).
+- Profile ekranı dashboard'la çakışıyor; streak burada yaşamalı.
+
+## SPRİNT HEDEFİ
+
+**Alışkanlık döngüsünü kur.** Üç ayak:
+1. **Onboarding revize** — seviye, ilgi alanı, günlük hedef ve hatırlatma saati toplansın.
+2. **Streak + Günlük Hedef sistemi** — her gün ne yaptığını kayıt et, seriyi göster.
+3. **Push notification** — kişiselleştirilmiş hatırlatma + "X kelime due" bildirimi.
+
+Bu üçü birlikte D7 retention'ı belirgin yükseltir.
+
+## YAPILACAKLAR
+
+### 1) Veritabanı Migration (`supabase/migrations/0002_habit.sql`)
+
+```sql
+-- Kullanıcı tercihleri (onboarding çıktısı)
+create table if not exists user_preferences (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  cefr_level text check (cefr_level in ('A1','A2','B1','B2','C1','C2')),
+  daily_goal integer not null default 10,
+  reminder_hour integer check (reminder_hour between 0 and 23),
+  reminder_minute integer check (reminder_minute between 0 and 59),
+  reminder_enabled boolean not null default true,
+  interests text[] not null default '{}',
+  push_token text,
+  timezone text,
+  onboarded_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+-- Günlük aktivite kaydı (streak + heatmap için)
+create table if not exists daily_activity (
+  user_id uuid references auth.users(id) on delete cascade,
+  day date not null,
+  reviews_done integer not null default 0,
+  words_added integer not null default 0,
+  reading_minutes integer not null default 0,
+  goal_met boolean not null default false,
+  primary key (user_id, day)
+);
+
+create index if not exists daily_activity_user_day_idx
+  on daily_activity (user_id, day desc);
+
+-- RLS
+alter table user_preferences enable row level security;
+alter table daily_activity enable row level security;
+
+create policy "own prefs" on user_preferences
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "own activity" on daily_activity
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+```
+
+### 2) Bağımlılıklar
+
+`expo-notifications` ve `expo-device` ekle:
+
+```bash
+npx expo install expo-notifications expo-device
+```
+
+`app.json` plugins'e `expo-notifications` ekle (icon ve renk config'iyle):
+
+```json
+[
+  "expo-notifications",
+  { "icon": "./assets/notification-icon.png", "color": "#facc15" }
+]
+```
+
+### 3) `lib/preferences.ts` — Tercih Yönetimi
+
+```ts
+export interface UserPreferences {
+  cefrLevel?: 'A1'|'A2'|'B1'|'B2'|'C1'|'C2'
+  dailyGoal: number
+  reminderHour: number | null
+  reminderMinute: number | null
+  reminderEnabled: boolean
+  interests: string[]
+  timezone: string | null
+  onboardedAt: string | null
+}
+
+export async function getPreferences(): Promise<UserPreferences | null>
+export async function upsertPreferences(p: Partial<UserPreferences>): Promise<UserPreferences | null>
+export async function isOnboarded(): Promise<boolean>
+export async function setPushToken(token: string): Promise<void>
+```
+
+DB camelCase ↔ snake_case mapping bu dosyada yaşasın. Tüm Supabase çağrılarında `eq('user_id', userId)` filtresi kullan.
+
+### 4) `lib/streak.ts` — Streak Motoru
+
+Saf, test edilebilir fonksiyonlar:
+
+```ts
+export interface DailyActivity {
+  day: string  // YYYY-MM-DD
+  reviewsDone: number
+  wordsAdded: number
+  goalMet: boolean
+}
+
+export interface StreakInfo {
+  current: number          // şu anki ardışık gün serisi
+  longest: number          // tüm zamanların en uzun
+  todayMet: boolean
+  yesterdayMet: boolean
+  daysUntilLost: number    // bugün hedefi tutmazsa serinin kaç gün sonra kırılacağı (default 1)
+}
+
+export function computeStreak(
+  activities: DailyActivity[],
+  today: string  // ISO YYYY-MM-DD
+): StreakInfo
+
+// Aktivite kaydı upsert + streak rekorunun güncellenmesi
+export async function recordActivity(delta: {
+  reviewsDelta?: number
+  wordsAddedDelta?: number
+  readingMinutesDelta?: number
+}): Promise<void>
+
+export async function getRecentActivity(days: number): Promise<DailyActivity[]>
+```
+
+**computeStreak kuralları:**
+- Aktiviteler `goalMet=true` olanlar zincire dahil.
+- Bugün henüz tamamlanmamışsa zincir kırılmaz; bugün dahil edilmediğinde dün üzerinden sayım devam eder.
+- Yesterday hedefi tutulmadıysa current=0 (zincir kırılmış).
+- Pure function: side-effect yok, tarih `today` parametresi.
+
+**recordActivity** içinde:
+1. `daily_activity` row'u upsert (today için).
+2. `goal_met = reviews_done >= dailyGoal OR words_added >= dailyGoal` hesapla.
+3. RLS sayesinde DB tarafı user_id zorlu.
+
+### 5) Onboarding Revize — `app/onboarding.tsx`
+
+5 adımlık çoklu ekran (içeride state yönetimi yeterli, ayrı route gerekmez):
+
+**Adım 1 — Hoş geldin:** Logo + "Lexify ile günde 10 dakika, 30 günde C1 hedefine doğru" tarz mikro-değer önermesi. Devam butonu.
+
+**Adım 2 — Hangi seviyedesin?** 6 chip (A1–C2) + "bilmiyorum" butonu. Bilmiyorum tıklanırsa **3-soruluk hızlı test** açılır:
+- 1 kolay (A2 vocabulary), 1 orta (B1 grammar), 1 zor (B2 idiom).
+- 3 doğru → B2, 2 doğru → B1, 1 → A2, 0 → A1.
+
+**Adım 3 — Ne öğrenmek istiyorsun?** Çoklu seçim (en az 1, en fazla 5):
+- Haberler, İş İngilizcesi, Sınav (TOEFL/IELTS), Edebiyat, Teknoloji, Bilim, Film/Dizi, Seyahat, Günlük Konuşma.
+
+**Adım 4 — Günlük hedef:** 5/10/15/20/30 kelime chip seçimi. Default 10. Mikro-yazı: "Çoğu kullanıcı 10 ile başlar."
+
+**Adım 5 — Hatırlatma:** Time picker (saat + dakika). "Akşam 21:00'da seni güzel bir kelimeyle uyandırayım." Şimdi izin iste (`Notifications.requestPermissionsAsync`); reddederse `reminderEnabled=false`.
+
+Adımlar arası `useReducer` ile state. "Geri" butonu her adımda olsun. Final adımda `upsertPreferences` çağır + `onboardedAt = now()`. Push token alınabildiyse `setPushToken`.
+
+`app/_layout.tsx` veya `app/(tabs)/_layout.tsx` mount olduğunda `isOnboarded()` kontrolü → false ise `/onboarding`'e yönlendir.
+
+### 6) `lib/notifications.ts` — Bildirim Yönetimi
+
+```ts
+export async function registerForPush(): Promise<string | null>
+export async function scheduleDailyReminder(hour: number, minute: number): Promise<void>
+export async function cancelDailyReminder(): Promise<void>
+export async function refreshScheduledReminders(): Promise<void>
+```
+
+`scheduleDailyReminder` her gün belirtilen saatte tekrar eden lokal bildirim (`Notifications.scheduleNotificationAsync` + `trigger: { hour, minute, repeats: true }`).
+
+İçerik kişiselleştirme:
+- `getDueCount` çağır.
+- due > 0 → "🔥 Bugün gözden geçirilecek X kelime var · X gün serini koru"
+- due == 0 ama hedef tutulmadı → "10 dakikalık çalışma bugünün hedefini bitirir"
+- hedef bugün tutuldu → bildirimi atla (planlı zamanı geçti, yarın yeniden).
+
+`refreshScheduledReminders` her flashcard finish'ten sonra çağrılsın (hedef tutulduğunda yarınki içerik güncellensin).
+
+`app/_layout.tsx` mount'ta `Notifications.setNotificationHandler` kur.
+
+### 7) Streak Görünümü
+
+**Dashboard'a streak kartı ekle** (mevcut "Bugün Gözden Geçir" altına):
+
+- 7-günlük heatmap (son 7 gün, dolu kareler = goalMet).
+- Sol: 🔥 büyük rakam (current streak).
+- Altta küçük: "En uzun: X gün".
+- Bugün hedefi tutulduysa kart yeşil halka, tutulmadıysa boş.
+
+**Profile ekranını güncelle:** `app/(tabs)/profile.tsx` — Streak detay sayfası. 30-günlük heatmap (GitHub stili grid), günlük hedef ayarı (slider veya chips), hatırlatma saati değiştir, bildirim aç/kapa. Bu ekran `lib/preferences.ts` ile `lib/streak.ts`'i tüketsin.
+
+### 8) Aktivite Tetikleyicileri
+
+Üç noktada `recordActivity` çağrılsın:
+
+1. `flashcards.tsx` — her grade verildiğinde `recordActivity({ reviewsDelta: 1 })`.
+2. `useWordTip.ts` `saveTip` (kelime kaydedildi) — `recordActivity({ wordsAddedDelta: 1 })`.
+3. `oku.tsx` `saveHistory` (okuma yapıldı) — `recordActivity({ readingMinutesDelta: estimateMinutes(text) })`. estimate: `Math.ceil(wordCount / 200)` (200 wpm).
+
+Hedef tutuldu mu hesabı server-side bilgi gerektirir (dailyGoal). Optimistik client tarafta hesapla, server'a yaz.
+
+### 9) Testler
+
+Yeni `__tests__/streak.test.ts`:
+
+- 5 ardışık gün goalMet=true → current=5, longest=5
+- 5 gün → 1 gün boş → 3 gün → current=3, longest=5
+- Bugün henüz tutulmadı, dün tutuldu → current = dün'e kadar olan zincir
+- Bugün ve dün tutulmamış → current=0
+- Hiç aktivite yok → current=0, longest=0
+- Tarih sıralaması karışık geldiğinde de doğru sonuç
+
+Hedef: en az 8 test, hepsi yeşil.
+
+### 10) Bonus — Streak Freeze (sadece UI flag)
+
+`user_preferences`'e `freeze_count integer not null default 0` ekleme şu an yapma. Ama UI'da "Streak Freeze yakında" yazsın (gelecek monetization hook).
+
+## YAPILMAYACAKLAR (BU SPRİNTTE)
+
+- AI sohbet, story modu — Sprint 3.
+- Yeni sınav modları (çoktan seçmeli, dinleme) — Sprint 3.
+- Server-side cron / background notifications — şu an local notifications yeterli.
+- Web push — sadece iOS/Android.
+- Sosyal (lig/arkadaş) — Sprint 4.
+
+## TEKNİK KISITLAR
+
+- TypeScript strict (`tsconfig.json` strict: true). `any` yasak.
+- Hata yönetimi: tüm Supabase çağrılarında error log; sessiz catch yasak.
+- Lokal saatler için kullanıcının `Intl.DateTimeFormat().resolvedOptions().timeZone` değerini timezone alanına yaz.
+- `expo-notifications`'da Android channel yapılandırması yap (`Notifications.setNotificationChannelAsync`).
+- iOS simulator'da push test edilemez; documentation'a not düş.
+- Streak hesabı tarihleri **UTC değil kullanıcı timezone'unda**. Test'te helper kullan: `dateInTz(date, tz)`.
+
+## DOSYA LİSTESİ
+
+**Yeni:**
+- `supabase/migrations/0002_habit.sql`
+- `lib/preferences.ts`
+- `lib/streak.ts`
+- `lib/notifications.ts`
+- `__tests__/streak.test.ts`
+- `assets/notification-icon.png` (placeholder; kullanıcıdan iste veya boş 96x96 png)
+
+**Değiştirilecek:**
+- `app.json` (notifications plugin)
+- `app/_layout.tsx` (notification handler + onboarding redirect)
+- `app/onboarding.tsx` (5 adım flow)
+- `app/(tabs)/dashboard.tsx` (streak kartı eklenecek)
+- `app/(tabs)/profile.tsx` (streak detay + ayarlar)
+- `app/(tabs)/flashcards.tsx` (recordActivity + refreshScheduledReminders çağrısı)
+- `hooks/useWordTip.ts` (recordActivity çağrısı)
+- `app/(tabs)/oku.tsx` (recordActivity çağrısı)
+- `package.json` (yeni deps)
+
+## BAŞARI KRİTERLERİ
+
+1. `npm test` → tüm testler yeşil (Sprint 1'in 27'si + Sprint 2'nin streak testleri).
+2. `npm run typecheck` → 0 hata.
+3. Yeni kullanıcı kayıt olduğunda `/onboarding` açılır; tamamlamadan tabs'e geçemez.
+4. Onboarding bittiğinde `user_preferences` satırı oluşur, `onboarded_at` dolu.
+5. Bildirim izni verildiyse, seçilen saatte günlük local notification planlanır.
+6. Flashcard'da grade verince `daily_activity` row'u günceller; günlük hedef tutulunca `goal_met=true`.
+7. Dashboard'da 🔥 streak kartı görünür ve son 7 günün heatmap'i doğrudur.
+8. Profile ekranından hatırlatma saatini değiştirince planlanan bildirim güncellenir (eski iptal, yeni schedule).
+9. `getDueCount().due == 0` ve hedef tutulmuşsa o günkü hatırlatma atlanır.
+
+## ÖNCE YAP
+
+İşe başlamadan önce şu dosyaları oku ve yaklaşımı 5-cümle özetle ki ortak anlayalım:
+
+1. `app/onboarding.tsx` (mevcut hâli)
+2. `app/_layout.tsx`
+3. `lib/data.ts` (Sprint 1'de eklenen alanlar)
+4. `app/(tabs)/profile.tsx`
+5. `app/(tabs)/dashboard.tsx`
+
+Sonra plan ver (hangi dosya hangi sırada, neyi nasıl), onayımı al, ondan sonra kod yaz.
+
+## COMMIT STRATEJİSİ
+
+Tek dev PR atma. Şu sırada commit'ler at:
+
+1. `feat(db): user_preferences ve daily_activity tabloları`
+2. `feat(streak): saf streak motoru + testler`
+3. `feat(prefs): tercih okuma/yazma katmanı`
+4. `feat(notifications): expo-notifications kurulumu + scheduling`
+5. `feat(onboarding): 5 adımlı revize`
+6. `feat(dashboard): streak kartı + heatmap`
+7. `feat(profile): streak detay + ayarlar ekranı`
+8. `feat(activity): grade/save/read tetikleyicileri`
+
+Her commit'in TypeScript + jest temiz olması şart.
+
+---
+
+## EK NOTLAR
+
+- Onboarding seviye testi için 3 soruyu kod içinde sabit dizide tut (şimdilik), sonra API'ye taşırız.
+- Streak hesabında "kullanıcı seyahat ettiyse timezone değişti" kenar durumunu yoksay; gelecek sprint.
+- `expo-notifications` Android emulator'da rate-limit'e takılabilir; gerçek cihazda dene.
+- Heatmap render için extra lib yükleme; `View` + flexbox grid yeter.
