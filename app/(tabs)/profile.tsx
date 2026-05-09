@@ -10,6 +10,32 @@ import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 import { listSavedWords } from '../../lib/data'
+import { CefrLevel, getUserPrefs } from '../../lib/prefs'
+
+/**
+ * Tarih dizisinden bugüne dayalı kesintisiz seri uzunluğu.
+ * created_at null/empty olabilir; tolere eder.
+ */
+function streakFromDates(dates: Array<string | null | undefined>): number {
+  const days = new Set<string>()
+  for (const raw of dates) {
+    if (!raw) continue
+    const d = raw.split('T')[0]
+    if (d) days.add(d)
+  }
+  if (!days.size) return 0
+  const sorted = [...days].sort().reverse()
+  let streak = 0
+  let cursor = new Date().toISOString().split('T')[0]
+  for (const day of sorted) {
+    if (day === cursor) {
+      streak++
+      const n = new Date(cursor); n.setDate(n.getDate() - 1)
+      cursor = n.toISOString().split('T')[0]
+    } else if (day < cursor) break
+  }
+  return streak
+}
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null)
@@ -17,6 +43,7 @@ export default function ProfileScreen() {
   const [cefrDist, setCefrDist] = useState<Record<string, number>>({})
   const [recentWords, setRecentWords] = useState<any[]>([])
   const [recentHistory, setRecentHistory] = useState<any[]>([])
+  const [prefs, setPrefs] = useState<{ level: CefrLevel; dailyGoal: number }>({ level: 'B1', dailyGoal: 10 })
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
@@ -27,22 +54,16 @@ export default function ProfileScreen() {
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
+    // Onboarding'den kaydedilen tercihler
+    const p = await getUserPrefs()
+    setPrefs({ level: p.level, dailyGoal: p.dailyGoal })
+
     if (!user) {
       const words = await listSavedWords({ orderBy: 'created_at', ascending: false })
       const dist: Record<string, number> = {}
       words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
 
-      let streak = 0
-      const sortedDates = [...new Set(words.map((w: any) => (w.created_at ?? '').split('T')[0]).filter(Boolean))].sort().reverse()
-      let checkDate = new Date().toISOString().split('T')[0]
-      for (const date of sortedDates) {
-        if (date === checkDate) {
-          streak++
-          const d = new Date(checkDate)
-          d.setDate(d.getDate() - 1)
-          checkDate = d.toISOString().split('T')[0]
-        } else break
-      }
+      const streak = streakFromDates(words.map((w: any) => w.created_at))
 
       setStats({
         total: words.length,
@@ -76,17 +97,7 @@ export default function ProfileScreen() {
     const dist: Record<string, number> = {}
     words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
 
-    let streak = 0
-    const sortedDates = [...new Set(words.map((w: any) => w.created_at.split('T')[0]))].sort().reverse()
-    let checkDate = new Date().toISOString().split('T')[0]
-    for (const date of sortedDates) {
-      if (date === checkDate) {
-        streak++
-        const d = new Date(checkDate)
-        d.setDate(d.getDate() - 1)
-        checkDate = d.toISOString().split('T')[0]
-      } else break
-    }
+    const streak = streakFromDates(words.map((w: any) => w.created_at))
 
     setStats({
       total: words.length,
@@ -141,12 +152,25 @@ export default function ProfileScreen() {
           <Text style={styles.name}>{name}</Text>
           <Text style={styles.email}>{user?.email}</Text>
 
-          {stats.streak > 0 && (
-            <View style={styles.streakBadge}>
-              <Text style={styles.streakEmoji}>🔥</Text>
-              <Text style={styles.streakText}>{stats.streak} günlük seri</Text>
+          <View style={styles.badgeRow}>
+            {stats.streak > 0 && (
+              <View style={styles.streakBadge}>
+                <Text style={styles.streakEmoji}>🔥</Text>
+                <Text style={styles.streakText}>{stats.streak} günlük seri</Text>
+              </View>
+            )}
+            <View style={[styles.levelBadge, { borderColor: (cefrColors[prefs.level] || colors.accent) + '55', backgroundColor: (cefrColors[prefs.level] || colors.accent) + '14' }]}>
+              <Text style={[styles.levelBadgeText, { color: cefrColors[prefs.level] || colors.accent }]}>
+                Seviye · {prefs.level}
+              </Text>
             </View>
-          )}
+            <View style={styles.goalBadge}>
+              <Ionicons name="trophy-outline" size={12} color={colors.accent} />
+              <Text style={styles.goalBadgeText}>
+                {Math.min(stats.today, prefs.dailyGoal)} / {prefs.dailyGoal} bugün
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.statsRow}>
@@ -274,9 +298,14 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 32, fontWeight: '800', color: colors.bg },
   name: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 3 },
   email: { fontSize: 13, color: colors.textMuted, marginBottom: 10 },
-  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.3)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 },
-  streakEmoji: { fontSize: 16 },
-  streakText: { color: '#fb923c', fontWeight: '700', fontSize: 13 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 320 },
+  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.3)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  streakEmoji: { fontSize: 14 },
+  streakText: { color: '#fb923c', fontWeight: '700', fontSize: 12 },
+  levelBadge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  levelBadgeText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  goalBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.accent + '14', borderWidth: 1, borderColor: colors.accent + '40', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  goalBadgeText: { color: colors.accent, fontWeight: '700', fontSize: 12 },
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   statCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   statValue: { fontSize: 22, fontWeight: '800' },

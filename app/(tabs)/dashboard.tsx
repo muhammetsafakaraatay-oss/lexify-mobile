@@ -17,6 +17,37 @@ interface Stats {
   streak: number
 }
 
+/**
+ * Bugünden geriye doğru kesintisiz aktif gün sayısını döndürür.
+ * Tarih girdilerinde null/empty değerlere toleranslıdır.
+ */
+function computeStreakFromDates(dates: Array<string | null | undefined>): number {
+  const uniqueDays = new Set<string>()
+  for (const raw of dates) {
+    if (!raw) continue
+    const day = raw.split('T')[0]
+    if (day) uniqueDays.add(day)
+  }
+  if (uniqueDays.size === 0) return 0
+
+  const sorted = [...uniqueDays].sort().reverse()
+  let streak = 0
+  let cursor = new Date().toISOString().split('T')[0]
+  for (const day of sorted) {
+    if (day === cursor) {
+      streak++
+      const d = new Date(cursor)
+      d.setDate(d.getDate() - 1)
+      cursor = d.toISOString().split('T')[0]
+    } else if (day < cursor) {
+      // boşluk var — seri bitti
+      break
+    }
+    // day > cursor: gelecek tarih, atla
+  }
+  return streak
+}
+
 export default function DashboardScreen() {
   const [user, setUser] = useState<User | null>(null)
   const [stats, setStats] = useState<Stats>({ total: 0, today: 0, week: 0, mastered: 0, streak: 0 })
@@ -39,17 +70,7 @@ export default function DashboardScreen() {
         getDueCount(),
       ])
 
-      let streak = 0
-      const sortedDates = [...new Set(words.map((w: any) => (w.created_at ?? '').split('T')[0]).filter(Boolean))].sort().reverse()
-      let checkDate = new Date().toISOString().split('T')[0]
-      for (const date of sortedDates) {
-        if (date === checkDate) {
-          streak++
-          const d = new Date(checkDate)
-          d.setDate(d.getDate() - 1)
-          checkDate = d.toISOString().split('T')[0]
-        } else break
-      }
+      const streak = computeStreakFromDates(words.map((w) => w.created_at))
 
       setStats({
         total: words.length,
@@ -82,19 +103,9 @@ export default function DashboardScreen() {
       getDueCount(),
     ])
 
-    // Streak hesapla
-    const words = allWordsRes.data || []
-    let streak = 0
-    const sortedDates = [...new Set(words.map((w: any) => w.created_at.split('T')[0]))].sort().reverse()
-    let checkDate = new Date().toISOString().split('T')[0]
-    for (const date of sortedDates) {
-      if (date === checkDate) {
-        streak++
-        const d = new Date(checkDate)
-        d.setDate(d.getDate() - 1)
-        checkDate = d.toISOString().split('T')[0]
-      } else break
-    }
+    // Streak hesapla — created_at null olabilir, helper tolere eder.
+    const words = (allWordsRes.data ?? []) as { created_at?: string | null }[]
+    const streak = computeStreakFromDates(words.map((w) => w.created_at ?? undefined))
 
     setStats({
       total: totalRes.count ?? 0,

@@ -58,6 +58,22 @@ async function getCurrentUserId(): Promise<string | null> {
   return user?.id ?? null
 }
 
+/**
+ * Supabase `.or()` ham filtre string'i bekler. Virgül/parantez ayraç olduğundan
+ * arama girdisi içlerinde geçerse query parse kırılır; ayrıca %/_ ilike wildcard'ı.
+ * Burada hem virgül/parantezi temizliyor hem ilike meta karakterlerini kaçırıyoruz.
+ */
+function escapeIlikePattern(input: string): string {
+  return input
+    // virgül ve parantez Supabase or() ayraçlarıdır — basitçe kaldır
+    .replace(/[(),]/g, ' ')
+    // ilike wildcard'larını kaçır
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .trim()
+}
+
 async function readGuestSavedWords(): Promise<SavedWord[]> {
   try {
     const raw = await AsyncStorage.getItem(GUEST_SAVED_WORDS_KEY)
@@ -205,7 +221,10 @@ export async function listSavedWords(options?: {
     .eq('user_id', userId)
 
   if (options?.search) {
-    query = query.or(`word.ilike.%${options.search}%,translation.ilike.%${options.search}%`)
+    // Supabase .or() string'inde virgül/parantez ayraçtır; ayrıca %, _ ve \ ilike wildcard'ı.
+    // Kullanıcı girdisini kaçırmadan geçirmek desen kırılmasına yol açar.
+    const escaped = escapeIlikePattern(options.search)
+    query = query.or(`word.ilike.%${escaped}%,translation.ilike.%${escaped}%`)
   }
 
   if (options?.orderBy) {
