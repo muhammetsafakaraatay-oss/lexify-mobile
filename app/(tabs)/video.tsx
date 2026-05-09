@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, TextInput, ActivityIndicator, Modal, Pressable
+  ScrollView, TextInput, ActivityIndicator, Modal, Pressable, Platform
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import YoutubePlayer from 'react-native-youtube-iframe'
 import { supabase } from '../../lib/supabase'
 import { translateWord } from '../../lib/api'
 import { colors } from '../../lib/theme'
 import * as Speech from 'expo-speech'
+
+const YoutubePlayer: React.ComponentType<any> = Platform.OS !== 'web'
+  ? require('react-native-youtube-iframe').default
+  : () => null
 
 interface Segment {
   text: string

@@ -4,10 +4,11 @@ import {
   StyleSheet, ActivityIndicator, SafeAreaView, Modal, Pressable
 } from 'react-native'
 import { supabase } from '../../lib/supabase'
-import { translateWord, fetchArticle } from '../../lib/api'
+import { translateWord } from '../../lib/api'
 import { colors } from '../../lib/theme'
 import * as Speech from 'expo-speech'
 import { useLocalSearchParams } from 'expo-router'
+import { recordActivity } from '../../lib/streak'
 
 function tokenize(text: string) {
   const out: { word: boolean; val: string }[] = []
@@ -53,7 +54,9 @@ export default function OkuScreen() {
         setInput(data.text)
         await saveHistory(articleUrl, data.text)
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('[oku] handleFetchArticleFromUrl error:', e)
+    }
     finally { setFetching(false) }
   }
 
@@ -66,7 +69,6 @@ export default function OkuScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      // Başlık çıkar
       let title = articleUrl
       const titleMatch = text.match(/^([^.!?]{10,100})[.!?]/)
       if (titleMatch) title = titleMatch[1].trim()
@@ -74,7 +76,12 @@ export default function OkuScreen() {
         user_id: user.id, url: articleUrl,
         title: title, word_count: text.split(' ').length,
       })
-    } catch (e) {}
+      const wordCount = text.split(/\s+/).length
+      const readingMinutes = Math.ceil(wordCount / 200)
+      await recordActivity({ readingMinutesDelta: readingMinutes })
+    } catch (e) {
+      console.error('[oku] saveHistory error:', e)
+    }
   }
 
   async function handleFetchArticle() {
@@ -94,7 +101,9 @@ export default function OkuScreen() {
         await saveHistory(url, data.text)
         setUrl('')
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('[oku] handleFetchArticle error:', e)
+    }
     finally { setFetching(false) }
   }
 
@@ -131,6 +140,7 @@ export default function OkuScreen() {
       }, { onConflict: 'user_id,word' })
       setSaved(p => ({ ...p, [k]: true }))
       setTip((prev: any) => prev ? { ...prev, _saved: true } : prev)
+      await recordActivity({ wordsAddedDelta: 1 })
     }
   }
 
@@ -158,7 +168,7 @@ export default function OkuScreen() {
           </View>
           <TextInput
             style={styles.textInput}
-            placeholder="Ingilizce metni buraya yapistirin..."
+            placeholder="İngilizce metni buraya yapıştırın..."
             placeholderTextColor={colors.textMuted}
             value={input}
             onChangeText={setInput}

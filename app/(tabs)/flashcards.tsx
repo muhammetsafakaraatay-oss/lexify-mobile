@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { colors } from '../../lib/theme'
 import * as Speech from 'expo-speech'
+import { recordActivity } from '../../lib/streak'
+import { refreshScheduledReminders } from '../../lib/notifications'
 
 const { width } = Dimensions.get('window')
 
@@ -56,6 +58,7 @@ export default function FlashcardsScreen() {
     const word = words[current]
     setResults(p => ({ ...p, [word.id]: result }))
     const { data: { user } } = await supabase.auth.getUser()
+
     if (result === 'know') {
       setStreak(s => s + 1)
       const newCount = (word.review_count || 0) + 1
@@ -64,10 +67,18 @@ export default function FlashcardsScreen() {
       setStreak(0)
       await supabase.from('saved_words').update({ review_count: Math.max(0, (word.review_count || 0) - 1) }).eq('id', word.id).eq('user_id', user!.id)
     }
+
+    await recordActivity({ reviewsDelta: 1 })
+
     Animated.timing(flipAnim, { toValue: 0, duration: 0, useNativeDriver: true }).start()
     setFlipped(false)
-    if (current + 1 >= words.length) setFinished(true)
-    else setCurrent(c => c + 1)
+
+    if (current + 1 >= words.length) {
+      setFinished(true)
+      await refreshScheduledReminders()
+    } else {
+      setCurrent(c => c + 1)
+    }
   }
 
   const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })

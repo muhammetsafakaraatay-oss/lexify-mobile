@@ -16,8 +16,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lexify.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Kitap ve metinlerdeki kelimeleri taramak i\u00e7in kamera kullan\u0131l\u0131r.",
-        "NSPhotoLibraryUsageDescription": "Galeriden resim se\u00e7mek i\u00e7in kullan\u0131l\u0131r."
+        "NSCameraUsageDescription": "Kitap ve metinlerdeki kelimeleri taramak için kamera kullanılır.",
+        "NSPhotoLibraryUsageDescription": "Galeriden resim seçmek için kullanılır."
       }
     },
     "android": {
@@ -34,6 +34,10 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        { "icon": "./assets/notification-icon.png", "color": "#facc15" }
+      ],
       [
         "expo-build-properties",
         {

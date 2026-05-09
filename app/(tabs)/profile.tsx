@@ -1,31 +1,45 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, ActivityIndicator, Image
+  TouchableOpacity, ActivityIndicator, Image, Switch, Platform
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { useRouter } from 'expo-router'
-import { colors } from '../../lib/theme'
+import { colors, radius } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
+import { getRecentActivity, computeStreak, DailyActivity, StreakInfo } from '../../lib/streak'
+import { getPreferences, upsertPreferences, UserPreferences } from '../../lib/preferences'
+import { scheduleDailyReminder, cancelDailyReminder } from '../../lib/notifications'
+
+const GOALS = [5, 10, 15, 20, 30]
+
+function getLastNDays(n: number): string[] {
+  const days: string[] = []
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+    days.push(d.toISOString().split('T')[0])
+  }
+  return days
+}
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0, streak: 0 })
+  const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0 })
   const [cefrDist, setCefrDist] = useState<Record<string, number>>({})
-  const [recentWords, setRecentWords] = useState<any[]>([])
   const [recentHistory, setRecentHistory] = useState<any[]>([])
-  const [wordOfDay, setWordOfDay] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [streakInfo, setStreakInfo] = useState<StreakInfo | null>(null)
+  const [activityMap, setActivityMap] = useState<Record<string, DailyActivity>>({})
+  const [prefs, setPrefs] = useState<UserPreferences | null>(null)
+  const [savingGoal, setSavingGoal] = useState(false)
   const router = useRouter()
 
   const cefrColor: Record<string, string> = {
     A1: '#4ade80', A2: '#86efac', B1: '#facc15', B2: '#fb923c', C1: '#f87171', C2: '#e879f9'
   }
 
-  useEffect(() => { load() }, [])
-
-  async function load() {
+  const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
     setUser(user)
@@ -33,69 +47,76 @@ export default function ProfileScreen() {
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-    const [all, todayRes, weekRes, historyRes] = await Promise.all([
+    const [all, todayRes, weekRes, historyRes, activities, userPrefs] = await Promise.all([
       supabase.from('saved_words').select('*').eq('user_id', user.id),
       supabase.from('saved_words').select('id', { count: 'exact' }).eq('user_id', user.id).gte('created_at', today),
       supabase.from('saved_words').select('id', { count: 'exact' }).eq('user_id', user.id).gte('created_at', weekAgo),
       supabase.from('reading_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3),
+      getRecentActivity(30),
+      getPreferences(),
     ])
 
     const words = all.data || []
     const dist: Record<string, number> = {}
     words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
 
-    // Streak hesapla
-    let streak = 0
-    const sortedDates = [...new Set(words.map((w: any) => w.created_at.split('T')[0]))].sort().reverse()
-    const todayStr = new Date().toISOString().split('T')[0]
-    let checkDate = todayStr
-    for (const date of sortedDates) {
-      if (date === checkDate) {
-        streak++
-        const d = new Date(checkDate)
-        d.setDate(d.getDate() - 1)
-        checkDate = d.toISOString().split('T')[0]
-      } else break
-    }
+    const map: Record<string, DailyActivity> = {}
+    for (const a of activities) map[a.day] = a
+    setActivityMap(map)
+    setStreakInfo(computeStreak(activities, today))
+    setPrefs(userPrefs)
 
     setStats({
       total: words.length,
       mastered: words.filter((w: any) => w.mastered).length,
       today: todayRes.count || 0,
       week: weekRes.count || 0,
-      streak,
     })
     setCefrDist(dist)
-    setRecentWords(words.filter((w: any) => !w.mastered).sort((a: any, b: any) => a.review_count - b.review_count).slice(0, 3))
     setRecentHistory(historyRes.data || [])
-
-    try {
-      const res = await fetch('https://lexitr.vercel.app/api/word-of-day')
-      setWordOfDay(await res.json())
-    } catch (e) {}
-
     setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function updateGoal(goal: number) {
+    setSavingGoal(true)
+    await upsertPreferences({ dailyGoal: goal })
+    setPrefs(p => p ? { ...p, dailyGoal: goal } : p)
+    setSavingGoal(false)
+  }
+
+  async function toggleReminder(val: boolean) {
+    await upsertPreferences({ reminderEnabled: val })
+    setPrefs(p => p ? { ...p, reminderEnabled: val } : p)
+    if (val && prefs?.reminderHour != null && prefs?.reminderMinute != null) {
+      await scheduleDailyReminder(prefs.reminderHour, prefs.reminderMinute)
+    } else {
+      await cancelDailyReminder()
+    }
   }
 
   function timeAgo(date: string) {
     const diff = Date.now() - new Date(date).getTime()
     const days = Math.floor(diff / 86400000)
     const hours = Math.floor(diff / 3600000)
-    if (days > 0) return days + ' gun once'
-    if (hours > 0) return hours + ' saat once'
-    return 'Az once'
+    if (days > 0) return days + ' gün önce'
+    if (hours > 0) return hours + ' saat önce'
+    return 'Az önce'
   }
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
 
-  const name = user?.user_metadata?.full_name || 'Kullanici'
+  const name = user?.user_metadata?.full_name || 'Kullanıcı'
   const avatar = user?.user_metadata?.avatar_url
   const cefrOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
   const maxCefr = Math.max(...Object.values(cefrDist), 1)
+  const last30 = getLastNDays(30)
+  const today = new Date().toISOString().split('T')[0]
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, Platform.OS === 'web' && { paddingTop: 16 }]}>
 
         <View style={styles.profileCard}>
           {avatar
@@ -104,14 +125,20 @@ export default function ProfileScreen() {
           }
           <Text style={styles.name}>{name}</Text>
           <Text style={styles.email}>{user?.email}</Text>
+          {prefs?.cefrLevel && (
+            <View style={[styles.cefrBadgeLg, { borderColor: cefrColor[prefs.cefrLevel] }]}>
+              <Text style={[styles.cefrBadgeLgText, { color: cefrColor[prefs.cefrLevel] }]}>
+                {prefs.cefrLevel}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.statsRow}>
           {[
-            { label: '🔥 Seri', value: stats.streak, color: '#fb923c' },
-          { label: 'Toplam', value: stats.total, color: colors.accent },
+            { label: 'Toplam', value: stats.total, color: colors.accent },
             { label: 'Bugün', value: stats.today, color: '#4ade80' },
-              { label: 'Öğrenildi', value: stats.mastered, color: '#e879f9' },
+            { label: 'Öğrenildi', value: stats.mastered, color: '#e879f9' },
           ].map(s => (
             <View key={s.label} style={styles.statCard}>
               <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
@@ -120,32 +147,80 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        {wordOfDay && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚡ Günün Kelimesi</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Text style={styles.wodWord}>{wordOfDay.word}</Text>
-              {wordOfDay.cefr && (
-                <View style={[styles.cefrBadge, { borderColor: cefrColor[wordOfDay.cefr] || colors.border }]}>
-                  <Text style={[styles.cefrText, { color: cefrColor[wordOfDay.cefr] || colors.textMuted }]}>{wordOfDay.cefr}</Text>
-                </View>
-              )}
+        {streakInfo !== null && (
+          <View style={[styles.section, streakInfo.todayMet && styles.sectionGreen]}>
+            <View style={styles.streakHeader}>
+              <View style={styles.streakFlameRow}>
+                <Text style={styles.streakFlame}>🔥</Text>
+                <Text style={styles.streakNumber}>{streakInfo.current}</Text>
+                <Text style={styles.streakDays}> günlük seri</Text>
+              </View>
+              <Text style={styles.streakLongest}>En uzun: {streakInfo.longest} gün</Text>
             </View>
-            <Text style={styles.wodTr}>{wordOfDay.translation}</Text>
+
+            {streakInfo.todayMet && (
+              <Text style={styles.goalMetText}>✓ Bugünkü hedef tamamlandı!</Text>
+            )}
+
+            <Text style={styles.heatmapLabel}>Son 30 Gün</Text>
+            <View style={styles.heatmap30}>
+              {last30.map((day) => {
+                const met = activityMap[day]?.goalMet ?? false
+                const isToday = day === today
+                return (
+                  <View
+                    key={day}
+                    style={[
+                      styles.heatBox,
+                      met && styles.heatBoxMet,
+                      isToday && styles.heatBoxToday,
+                    ]}
+                  />
+                )
+              })}
+            </View>
+
+            <Text style={styles.streakFreezeHint}>⭐ Streak Freeze — yakında</Text>
           </View>
         )}
 
-        {recentWords.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔥 Tekrar Et</Text>
-            {recentWords.map((w: any) => (
-              <View key={w.id} style={styles.wordRow}>
-                <Text style={styles.wordText}>{w.word}</Text>
-                <Text style={styles.wordTr}>{w.translation}</Text>
-              </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🎯 Günlük Hedef</Text>
+          <View style={styles.goalRow}>
+            {GOALS.map(g => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.goalChip, prefs?.dailyGoal === g && styles.goalChipActive]}
+                onPress={() => updateGoal(g)}
+                disabled={savingGoal}
+              >
+                <Text style={[styles.goalChipText, prefs?.dailyGoal === g && styles.goalChipTextActive]}>
+                  {g}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
-        )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🔔 Hatırlatmalar</Text>
+          <View style={styles.reminderRow}>
+            <View>
+              <Text style={styles.reminderTitle}>Günlük Hatırlatma</Text>
+              {prefs?.reminderHour != null && prefs?.reminderMinute != null && (
+                <Text style={styles.reminderTime}>
+                  {String(prefs.reminderHour).padStart(2, '0')}:{String(prefs.reminderMinute).padStart(2, '0')}
+                </Text>
+              )}
+            </View>
+            <Switch
+              value={prefs?.reminderEnabled ?? false}
+              onValueChange={toggleReminder}
+              trackColor={{ false: '#333', true: colors.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
 
         {recentHistory.length > 0 && (
           <View style={styles.section}>
@@ -195,6 +270,7 @@ export default function ProfileScreen() {
           <Text style={styles.signOutText}>Çıkış Yap</Text>
         </TouchableOpacity>
 
+        <View style={{ height: Platform.OS === 'web' ? 34 : 0 }} />
       </ScrollView>
     </SafeAreaView>
   )
@@ -209,20 +285,40 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   avatarText: { fontSize: 28, fontWeight: '800', color: colors.bg },
   name: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 2 },
-  email: { fontSize: 13, color: colors.textMuted },
+  email: { fontSize: 13, color: colors.textMuted, marginBottom: 6 },
+  cefrBadgeLg: { borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3, marginTop: 4 },
+  cefrBadgeLgText: { fontSize: 13, fontWeight: '800' },
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   statCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   statValue: { fontSize: 24, fontWeight: '800' },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
   section: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+  sectionGreen: { borderColor: '#4ade80' },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 12 },
-  wodWord: { fontSize: 20, fontWeight: '800', color: colors.text },
-  cefrBadge: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  cefrText: { fontSize: 10, fontWeight: '700' },
-  wodTr: { color: colors.textMuted, fontSize: 13 },
-  wordRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
-  wordText: { fontSize: 15, fontWeight: '600', color: colors.text },
-  wordTr: { fontSize: 14, color: colors.textMuted },
+  streakHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  streakFlameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  streakFlame: { fontSize: 24 },
+  streakNumber: { fontSize: 32, fontWeight: '800', color: colors.accent },
+  streakDays: { fontSize: 13, color: colors.textMuted, alignSelf: 'flex-end', marginBottom: 4 },
+  streakLongest: { fontSize: 12, color: colors.textMuted },
+  goalMetText: { color: '#4ade80', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  heatmapLabel: { fontSize: 11, color: colors.textMuted, marginTop: 8, marginBottom: 8 },
+  heatmap30: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  heatBox: { width: 20, height: 20, borderRadius: 4, backgroundColor: '#1a1a1a' },
+  heatBoxMet: { backgroundColor: colors.accent },
+  heatBoxToday: { borderWidth: 1.5, borderColor: colors.accent },
+  streakFreezeHint: { fontSize: 11, color: colors.textMuted, marginTop: 8 },
+  goalRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  goalChip: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSurface,
+  },
+  goalChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  goalChipText: { color: colors.textMuted, fontWeight: '700', fontSize: 14 },
+  goalChipTextActive: { color: colors.bg },
+  reminderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reminderTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  reminderTime: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   historyTitle: { flex: 1, fontSize: 14, color: colors.text, marginRight: 8 },
   historyTime: { fontSize: 12, color: colors.textMuted },
