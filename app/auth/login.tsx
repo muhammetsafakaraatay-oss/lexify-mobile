@@ -1,26 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { makeRedirectUri } from 'expo-auth-session'
 import { supabase } from '../../lib/supabase'
 import { colors } from '../../lib/theme'
-import { useRouter } from 'expo-router'
 
 WebBrowser.maybeCompleteAuthSession()
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-        router.replace('/(tabs)/dashboard')
-      }
-    })
-    return () => subscription.unsubscribe()
-  }, [])
 
   async function signInWithGoogle() {
     setLoading(true)
@@ -56,7 +44,6 @@ export default function LoginScreen() {
           const refresh_token = params.get('refresh_token') || ''
           if (access_token) {
             await supabase.auth.setSession({ access_token, refresh_token })
-            router.replace('/(tabs)/dashboard')
           }
         }
       }
@@ -85,11 +72,6 @@ export default function LoginScreen() {
           )
         }
       </TouchableOpacity>
-      {Platform.OS === 'web' && (
-        <Text style={styles.hint}>
-          Giriş yaptıktan sonra bu sayfaya geri dönün
-        </Text>
-      )}
     </View>
   )
 }
@@ -104,5 +86,4 @@ const styles = StyleSheet.create({
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   googleG: { fontSize: 18, fontWeight: '800', color: colors.bg },
   btnText: { color: colors.bg, fontWeight: '700', fontSize: 16 },
-  hint: { fontSize: 13, color: colors.textMuted, marginTop: 16, textAlign: 'center' },
 })

@@ -1,8 +1,18 @@
-import { Tabs } from 'expo-router'
+import { useEffect } from 'react'
+import { Tabs, useRouter } from 'expo-router'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
+import { supabase } from '../../lib/supabase'
 
 export default function TabsLayout() {
+  const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) router.replace('/auth/login')
+    })
+  }, [])
+
   return (
     <Tabs screenOptions={{
       headerShown: false,
