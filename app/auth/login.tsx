@@ -7,34 +7,50 @@ import { colors } from '../../lib/theme'
 
 WebBrowser.maybeCompleteAuthSession()
 
+const REPLIT_URL = 'https://86db684b-cd2c-4ad2-893d-001441f45d18-00-3g87e5826rekw.pike.replit.dev'
+
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   async function signInWithGoogle() {
     setLoading(true)
+    setErrorMsg(null)
     try {
       if (Platform.OS === 'web') {
         const redirectTo = typeof window !== 'undefined'
           ? window.location.origin
           : makeRedirectUri({ scheme: 'lexitr' })
 
-        const { error } = await supabase.auth.signInWithOAuth({
+        console.log('[auth] redirectTo:', redirectTo)
+
+        const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: { redirectTo },
         })
-        if (error) throw error
+
+        if (error) {
+          console.error('[auth] signInWithOAuth error:', error.status, error.message)
+          setErrorMsg(`Hata ${error.status ?? ''}: ${error.message}`)
+          return
+        }
+
+        console.log('[auth] OAuth URL generated:', data?.url ? 'yes' : 'no')
         return
       }
 
       const redirectUri = makeRedirectUri({ scheme: 'lexitr' })
+      console.log('[auth] native redirectUri:', redirectUri)
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: true,
-        },
+        options: { redirectTo: redirectUri, skipBrowserRedirect: true },
       })
-      if (error) throw error
+      if (error) {
+        console.error('[auth] signInWithOAuth error:', error.status, error.message)
+        setErrorMsg(`Hata ${error.status ?? ''}: ${error.message}`)
+        return
+      }
       if (data.url) {
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri)
         if (result.type === 'success') {
@@ -47,8 +63,9 @@ export default function LoginScreen() {
           }
         }
       }
-    } catch (e) {
-      console.error('[login] Google sign-in error:', e)
+    } catch (e: any) {
+      console.error('[auth] unexpected error:', e)
+      setErrorMsg(e?.message ?? 'Beklenmeyen bir hata oluştu')
     } finally {
       setLoading(false)
     }
@@ -61,6 +78,7 @@ export default function LoginScreen() {
         <View style={styles.dot} />
       </View>
       <Text style={styles.subtitle}>İngilizce okurken kelime öğren</Text>
+
       <TouchableOpacity style={styles.btn} onPress={signInWithGoogle} disabled={loading}>
         {loading
           ? <ActivityIndicator color={colors.bg} />
@@ -72,6 +90,18 @@ export default function LoginScreen() {
           )
         }
       </TouchableOpacity>
+
+      {errorMsg && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        </View>
+      )}
+
+      {__DEV__ && (
+        <Text style={styles.devHint}>
+          redirect: {typeof window !== 'undefined' ? window.location.origin : 'native'}
+        </Text>
+      )}
     </View>
   )
 }
@@ -86,4 +116,7 @@ const styles = StyleSheet.create({
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   googleG: { fontSize: 18, fontWeight: '800', color: colors.bg },
   btnText: { color: colors.bg, fontWeight: '700', fontSize: 16 },
+  errorBox: { marginTop: 20, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#f87171', borderRadius: 10, padding: 14, width: '100%' },
+  errorText: { color: '#f87171', fontSize: 13, textAlign: 'center' },
+  devHint: { fontSize: 10, color: '#333', marginTop: 24, textAlign: 'center' },
 })
