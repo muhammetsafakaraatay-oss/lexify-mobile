@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { makeRedirectUri } from 'expo-auth-session'
+import { useRouter } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { enableGuestMode } from '../../lib/guest'
 import { colors } from '../../lib/theme'
 
 WebBrowser.maybeCompleteAuthSession()
 
-const REPLIT_URL = 'https://86db684b-cd2c-4ad2-893d-001441f45d18-00-3g87e5826rekw.pike.replit.dev'
-
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const router = useRouter()
 
   async function signInWithGoogle() {
     setLoading(true)
@@ -23,31 +24,25 @@ export default function LoginScreen() {
           : makeRedirectUri({ scheme: 'lexitr' })
 
         console.log('[auth] redirectTo:', redirectTo)
-
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: { redirectTo },
         })
-
         if (error) {
-          console.error('[auth] signInWithOAuth error:', error.status, error.message)
+          console.error('[auth] error:', error.status, error.message)
           setErrorMsg(`Hata ${error.status ?? ''}: ${error.message}`)
           return
         }
-
-        console.log('[auth] OAuth URL generated:', data?.url ? 'yes' : 'no')
+        console.log('[auth] OAuth URL:', data?.url ? 'ok' : 'none')
         return
       }
 
       const redirectUri = makeRedirectUri({ scheme: 'lexitr' })
-      console.log('[auth] native redirectUri:', redirectUri)
-
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: redirectUri, skipBrowserRedirect: true },
       })
       if (error) {
-        console.error('[auth] signInWithOAuth error:', error.status, error.message)
         setErrorMsg(`Hata ${error.status ?? ''}: ${error.message}`)
         return
       }
@@ -64,11 +59,15 @@ export default function LoginScreen() {
         }
       }
     } catch (e: any) {
-      console.error('[auth] unexpected error:', e)
       setErrorMsg(e?.message ?? 'Beklenmeyen bir hata oluştu')
     } finally {
       setLoading(false)
     }
+  }
+
+  async function continueAsGuest() {
+    await enableGuestMode()
+    router.replace('/(tabs)/catalog')
   }
 
   return (
@@ -89,6 +88,10 @@ export default function LoginScreen() {
             </View>
           )
         }
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.guestBtn} onPress={continueAsGuest}>
+        <Text style={styles.guestText}>Misafir olarak devam et</Text>
       </TouchableOpacity>
 
       {errorMsg && (
@@ -116,6 +119,8 @@ const styles = StyleSheet.create({
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   googleG: { fontSize: 18, fontWeight: '800', color: colors.bg },
   btnText: { color: colors.bg, fontWeight: '700', fontSize: 16 },
+  guestBtn: { marginTop: 14, paddingVertical: 14, width: '100%', alignItems: 'center' },
+  guestText: { color: colors.textMuted, fontSize: 15, fontWeight: '500' },
   errorBox: { marginTop: 20, backgroundColor: '#2a0a0a', borderWidth: 1, borderColor: '#f87171', borderRadius: 10, padding: 14, width: '100%' },
   errorText: { color: '#f87171', fontSize: 13, textAlign: 'center' },
   devHint: { fontSize: 10, color: '#333', marginTop: 24, textAlign: 'center' },

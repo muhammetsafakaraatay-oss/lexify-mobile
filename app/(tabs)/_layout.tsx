@@ -3,14 +3,19 @@ import { Tabs, useRouter } from 'expo-router'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { isGuestMode } from '../../lib/guest'
 
 export default function TabsLayout() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function guard() {
+      const guest = await isGuestMode()
+      if (guest) return
+      const { data: { session } } = await supabase.auth.getSession()
       if (!session) router.replace('/auth/login')
-    })
+    }
+    guard()
   }, [])
 
   return (
