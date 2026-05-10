@@ -120,9 +120,13 @@ export default function OkuScreen() {
     const k = word.toLowerCase()
     if (cache.current[k]) { setTip({ word, ...cache.current[k] }); return }
     setTip({ word, loading: true })
-    const data = await translateWord(word, sentence)
-    cache.current[k] = data
-    setTip({ word, ...data })
+    try {
+      const data = await translateWord(word, sentence)
+      cache.current[k] = data
+      setTip({ word, ...data })
+    } catch {
+      setTip({ word, error: true })
+    }
   }
 
   async function handleSave() {
@@ -214,6 +218,12 @@ export default function OkuScreen() {
           <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
             {tip?.loading ? (
               <ActivityIndicator color={colors.accent} style={{ margin: 32 }} />
+            ) : tip?.error ? (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <Text style={{ color: colors.textMuted, fontSize: 15 }}>
+                  "{tip.word}" çevrilemedi. Bağlantını kontrol et.
+                </Text>
+              </View>
             ) : tip ? (
               <>
                 <View style={styles.sheetHeader}>

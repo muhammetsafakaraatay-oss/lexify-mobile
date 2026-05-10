@@ -27,6 +27,7 @@ export default function CatalogScreen() {
   const [articles, setArticles] = useState<Article[]>([])
   const [filtered, setFiltered] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
   const [selectedLevel, setSelectedLevel] = useState('Tümü')
   const router = useRouter()
 
@@ -38,11 +39,17 @@ export default function CatalogScreen() {
   }, [selectedLevel, articles])
 
   async function loadArticles() {
+    setFetchError(false)
+    setLoading(true)
     try {
       const res = await fetch('https://lexitr.vercel.app/api/articles')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setArticles(data.articles || [])
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      console.warn('[catalog] loadArticles failed:', e)
+      setFetchError(true)
+    }
     finally { setLoading(false) }
   }
 
@@ -73,6 +80,21 @@ export default function CatalogScreen() {
 
       {loading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 48 }} size="large" />
+      ) : fetchError ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>⚠️</Text>
+          <Text style={styles.emptyTitle}>İçerikler yüklenemedi</Text>
+          <Text style={styles.emptyDesc}>İnternet bağlantını kontrol et ve tekrar dene.</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={loadArticles}>
+            <Text style={styles.retryText}>Yeniden Dene</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>📭</Text>
+          <Text style={styles.emptyTitle}>Bu seviyede makale yok</Text>
+          <Text style={styles.emptyDesc}>Farklı bir seviye seçmeyi dene.</Text>
+        </View>
       ) : (
         <FlatList
           data={filtered}
@@ -119,4 +141,10 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4, lineHeight: 21 },
   cardDesc: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   cardImage: { width: 80, height: 80, borderRadius: 8, backgroundColor: colors.bgSurface },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  emptyIcon: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 8, textAlign: 'center' },
+  emptyDesc: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  retryBtn: { backgroundColor: colors.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  retryText: { color: colors.bg, fontWeight: '700', fontSize: 15 },
 })
