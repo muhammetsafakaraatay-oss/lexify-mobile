@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import * as Speech from 'expo-speech'
+import { speak } from '../../lib/speech'
 
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Easing } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -103,7 +103,7 @@ export default function QuizScreen() {
     if (!enSlot || !trSlot) return
 
     if (enSlot.word.id === trSlot.word.id) {
-      Speech.speak(enSlot.word.word, { language: 'en-US', rate: 0.9 })
+      speak(enSlot.word.word, { rate: 0.9 })
       const eIdx = selectedEn, tIdx = selectedTr
       setSelectedEn(null); setSelectedTr(null)
       const newScore = score + 1
@@ -183,7 +183,7 @@ export default function QuizScreen() {
             <Animated.View key={slot?.key || `en-empty-${idx}`} style={{ opacity: enFade.current[idx], transform: [{ scale: enScale.current[idx] }, { translateX: enShake.current[idx] }] }}>
               <TouchableOpacity
                 style={[styles.card, selectedEn === idx && styles.cardSelected, wrongEn === idx && styles.cardWrong]}
-                onPress={() => { if (slot) { tapScale(enScale.current, idx); setSelectedEn(idx); Speech.speak(slot.word.word, { language: 'en-US', rate: 0.9 }) } }}
+                onPress={() => { if (slot) { tapScale(enScale.current, idx); setSelectedEn(idx); speak(slot.word.word, { rate: 0.9 }) } }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.cardText} numberOfLines={2}>{slot?.word.word || ''}</Text>

@@ -8,7 +8,7 @@ import { listSavedWords, SavedWord } from '../../lib/data'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
-import * as Speech from 'expo-speech'
+import { speak } from '../../lib/speech'
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('')
@@ -70,7 +70,7 @@ export default function SearchScreen() {
                   <Text style={styles.translation}>{item.translation}</Text>
                   {item.context ? <Text style={styles.context} numberOfLines={1}>{item.context}</Text> : null}
                 </View>
-                <TouchableOpacity onPress={() => Speech.speak(item.word, { language: 'en-US', rate: 0.8 })}>
+                <TouchableOpacity onPress={() => speak(item.word, { rate: 0.8 })}>
                   <Text style={{ fontSize: 20 }}>🔊</Text>
                 </TouchableOpacity>
               </View>

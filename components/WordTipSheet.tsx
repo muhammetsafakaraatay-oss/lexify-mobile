@@ -1,7 +1,8 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import * as Speech from 'expo-speech'
+import { speak } from '../lib/speech'
 import { cefrColors } from '../lib/cefr'
 import { colors } from '../lib/theme'
+import { Ionicons } from '@expo/vector-icons'
 
 export interface WordTipData {
   word?: string
@@ -36,7 +37,7 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
   return (
     <Modal visible={!!tip} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalBg} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+        <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
           <View style={styles.dragHandle} />
 
           {tip?.loading ? (
@@ -63,19 +64,19 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
                   </View>
                   {tip.ipa ? <Text style={styles.ipa}>/{tip.ipa}/</Text> : null}
                 </View>
+
                 {tip.word ? (
                   <TouchableOpacity
-                    style={styles.speakBtnArea}
-                    onPress={() => Speech.speak(tip.word!, { language: 'en-US', rate: 0.8 })}
+                    style={styles.speakBtn}
+                    onPress={() => speak(tip.word!)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Text style={styles.speakBtn}>🔊</Text>
+                    <Ionicons name="volume-medium-outline" size={24} color={colors.textMuted} />
                   </TouchableOpacity>
                 ) : null}
               </View>
 
-              <View style={styles.translationRow}>
-                <Text style={styles.translation}>{tip.tr}</Text>
-              </View>
+              <Text style={styles.translation}>{tip.tr}</Text>
 
               {tip.context ? (
                 <View style={styles.contextCard}>
@@ -87,14 +88,14 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
               {tip.examples?.length ? (
                 <View style={styles.examples}>
                   <Text style={styles.examplesLabel}>ÖRNEKLER</Text>
-                  {tip.examples.slice(0, 2).map((example, index) => (
+                  {tip.examples.slice(0, 2).map((ex, i) => (
                     <TouchableOpacity
-                      key={index}
+                      key={i}
                       style={styles.exampleRow}
-                      onPress={() => Speech.speak(example, { language: 'en-US', rate: 0.85 })}
+                      onPress={() => speak(ex)}
                     >
-                      <Text style={styles.exampleBullet}>▸</Text>
-                      <Text style={styles.example}>{example}</Text>
+                      <Ionicons name="play-circle-outline" size={16} color={colors.accent} style={{ marginTop: 2 }} />
+                      <Text style={styles.example}>{ex}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -104,8 +105,12 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
                 style={[styles.saveBtn, saved && styles.saveBtnSaved]}
                 onPress={onSave}
               >
+                {saved
+                  ? <Ionicons name="checkmark-circle-outline" size={18} color={colors.textMuted} />
+                  : <Ionicons name="bookmark-outline" size={18} color={colors.bg} />
+                }
                 <Text style={[styles.saveBtnText, saved && styles.saveBtnTextSaved]}>
-                  {saved ? '✓ Kaydedildi' : '+ Kelimeyi Kaydet'}
+                  {saved ? 'Kaydedildi' : 'Kelimeyi Kaydet'}
                 </Text>
               </TouchableOpacity>
             </>
@@ -119,17 +124,15 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
 const styles = StyleSheet.create({
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: '#0f0f0f', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingTop: 12, minHeight: 200,
+    backgroundColor: '#0f0f0f',
+    borderTopLeftRadius: 26, borderTopRightRadius: 26,
+    padding: 24, paddingTop: 12, minHeight: 220,
     borderWidth: 1, borderBottomWidth: 0, borderColor: '#222',
   },
-  dragHandle: {
-    width: 40, height: 4, backgroundColor: '#333', borderRadius: 2,
-    alignSelf: 'center', marginBottom: 20,
-  },
-  loadingArea: { alignItems: 'center', paddingVertical: 32, gap: 12 },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  loadingArea: { alignItems: 'center', paddingVertical: 36, gap: 14 },
   loadingText: { color: colors.textMuted, fontSize: 14 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 },
   sheetWord: { fontSize: 28, fontWeight: '800', color: colors.text },
   cefrBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
@@ -137,19 +140,16 @@ const styles = StyleSheet.create({
   typeBadge: { backgroundColor: '#1a1a1a', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   typeText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
   ipa: { color: colors.textMuted, fontSize: 14, fontFamily: 'Courier', marginTop: 2 },
-  speakBtnArea: { padding: 4, marginLeft: 8 },
-  speakBtn: { fontSize: 26 },
-  translationRow: { marginBottom: 14 },
-  translation: { fontSize: 24, color: colors.accent, fontWeight: '700' },
-  contextCard: { backgroundColor: '#141414', borderRadius: 10, padding: 12, marginBottom: 12 },
+  speakBtn: { padding: 4, marginLeft: 8 },
+  translation: { fontSize: 26, color: colors.accent, fontWeight: '700', marginBottom: 14 },
+  contextCard: { backgroundColor: '#141414', borderRadius: 12, padding: 12, marginBottom: 12 },
   contextLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 5 },
   context: { color: colors.textDim, fontSize: 13, lineHeight: 20 },
   examples: { marginBottom: 16 },
   examplesLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 8 },
-  exampleRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
-  exampleBullet: { color: colors.accent, fontSize: 12, marginTop: 3 },
+  exampleRow: { flexDirection: 'row', gap: 8, marginBottom: 7 },
   example: { flex: 1, color: colors.textMuted, fontSize: 13, lineHeight: 20 },
-  saveBtn: { backgroundColor: colors.accent, borderRadius: 14, padding: 15, alignItems: 'center', marginTop: 4 },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: 14, padding: 15, marginTop: 4 },
   saveBtnSaved: { backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a' },
   saveBtnText: { color: colors.bg, fontWeight: '800', fontSize: 15 },
   saveBtnTextSaved: { color: colors.textMuted },

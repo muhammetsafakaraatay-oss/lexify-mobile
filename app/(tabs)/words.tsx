@@ -7,7 +7,7 @@ import {
 import { deleteSavedWord, listUniqueSavedWords, SavedWord } from '../../lib/data'
 import { cefrColors, cefrLevels } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
-import * as Speech from 'expo-speech'
+import { speak } from '../../lib/speech'
 import { Ionicons } from '@expo/vector-icons'
 
 type SortMode = 'date' | 'alpha' | 'cefr'
@@ -166,7 +166,7 @@ export default function WordsScreen() {
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => Speech.speak(item.word, { language: 'en-US', rate: 0.8 })}
+                    onPress={() => speak(item.word, { rate: 0.8 })}
                   >
                     <Ionicons name="volume-medium-outline" size={20} color={colors.textMuted} />
                   </TouchableOpacity>
