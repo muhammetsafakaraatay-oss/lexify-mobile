@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { makeRedirectUri } from 'expo-auth-session'
 import { supabase } from '../../lib/supabase'
@@ -13,36 +13,44 @@ export default function LoginScreen() {
   const router = useRouter()
 
   async function signInWithGoogle() {
-    console.log('Button pressed')
     setLoading(true)
     try {
-      const redirectUri = makeRedirectUri({ scheme: 'lexitr' })
-      console.log('Redirect URI:', redirectUri)
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: true,
-        },
-      })
-      if (error) throw error
-      if (data.url) {
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri)
-        console.log('Auth result:', result.type)
+      if (Platform.OS === 'web') {
+        const redirectTo = typeof window !== 'undefined' ? window.location.origin : makeRedirectUri({ scheme: 'lexitr' })
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo,
+            skipBrowserRedirect: false,
+          },
+        })
+        if (error) throw error
+      } else {
+        const redirectUri = makeRedirectUri({ scheme: 'lexitr' })
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUri,
+            skipBrowserRedirect: true,
+          },
+        })
+        if (error) throw error
+        if (data.url) {
+          const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUri)
           if (result.type === 'success') {
-          const hash = result.url.split('#')[1] || ''
-          const params = new URLSearchParams(hash)
-          const access_token = params.get('access_token')
-          const refresh_token = params.get('refresh_token') || ''
-          console.log('access_token:', access_token ? 'found' : 'null')
-          if (access_token) {
-            await supabase.auth.setSession({ access_token, refresh_token })
-            router.replace('/(tabs)/dashboard')
+            const hash = result.url.split('#')[1] || ''
+            const params = new URLSearchParams(hash)
+            const access_token = params.get('access_token')
+            const refresh_token = params.get('refresh_token') || ''
+            if (access_token) {
+              await supabase.auth.setSession({ access_token, refresh_token })
+              router.replace('/(tabs)/dashboard')
+            }
           }
         }
       }
     } catch (e) {
-      console.error('Error:', e)
+      console.error('Login error:', e)
     } finally {
       setLoading(false)
     }
