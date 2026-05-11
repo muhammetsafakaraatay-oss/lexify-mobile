@@ -17,7 +17,7 @@
     "@gorhom/bottom-sheet": "^5.2.14",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@supabase/supabase-js": "^2.105.4",
-    "expo": "~54.0.34",
+    "expo": "^55.0.23",
     "expo-auth-session": "~7.0.11",
     "expo-av": "~16.0.8",
     "expo-build-properties": "~1.0.10",
