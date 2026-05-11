@@ -2,7 +2,7 @@ const http = require('http')
 const httpProxy = require('http-proxy')
 const fetch = require('node-fetch')
 
-const EXPO_PORT = 3000
+const EXPO_PORT = 8080
 const PORT = 5000
 const TARGET = 'https://lexitr.vercel.app'
 
