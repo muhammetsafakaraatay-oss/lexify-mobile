@@ -95,10 +95,29 @@ export default function FlashcardsScreen() {
     if (merged.length === 0) setFinished(true)
   }, [flipAnim, gradeRowAnim])
 
+  function advanceCard() {
+    Animated.timing(slideAnim, { toValue: 30, duration: 130, useNativeDriver: true }).start(() => {
+      flipAnim.setValue(0)
+      gradeRowAnim.setValue(0)
+      slideAnim.setValue(0)
+      setFlipped(false)
+      if (current + 1 >= queue.length) setFinished(true)
+      else setCurrent(c => c + 1)
+    })
+  }
+
   function flipCard() {
+    // In browse mode: if already flipped, advance to next card
+    if (flipped && mode === 'all') {
+      advanceCard()
+      return
+    }
     if (flipped) return
     Animated.spring(flipAnim, { toValue: 1, useNativeDriver: true, friction: 7, tension: 40 }).start(() => {
-      Animated.spring(gradeRowAnim, { toValue: 1, useNativeDriver: true, friction: 8, tension: 60 }).start()
+      // Only show grade row in SM-2 mode
+      if (mode === 'due') {
+        Animated.spring(gradeRowAnim, { toValue: 1, useNativeDriver: true, friction: 8, tension: 60 }).start()
+      }
     })
     setFlipped(true)
     const w = queue[current]
@@ -330,6 +349,13 @@ export default function FlashcardsScreen() {
                   <Text style={styles.cardContext} numberOfLines={3}>{word.context}</Text>
                 </View>
               ) : null}
+
+              {mode === 'all' && (
+                <View style={styles.flipHint}>
+                  <Ionicons name="arrow-forward-outline" size={14} color={colors.textMuted} />
+                  <Text style={styles.flipHintText}>Sonraki için dokun</Text>
+                </View>
+              )}
             </Animated.View>
 
           </Pressable>
@@ -341,28 +367,30 @@ export default function FlashcardsScreen() {
         )}
       </View>
 
-      {/* Grade buttons — only after flip */}
-      <Animated.View style={[
-        styles.gradeArea,
-        { opacity: gradeOpacity, transform: [{ translateY: gradeTranslate }] }
-      ]}
-        pointerEvents={flipped ? 'auto' : 'none'}
-      >
-        <Text style={styles.gradeLabel}>Kendini nasıl değerlendiriyorsun?</Text>
-        <View style={styles.gradeRow}>
-          {GRADES.map(btn => (
-            <TouchableOpacity
-              key={btn.grade}
-              style={[styles.gradeBtn, { backgroundColor: btn.bg, borderColor: btn.color }]}
-              onPress={() => handleGrade(btn.grade)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.gradeBtnLabel, { color: btn.color }]}>{btn.label}</Text>
-              <Text style={styles.gradeBtnPreview}>{previews[btn.grade]}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </Animated.View>
+      {/* Grade buttons — only in SM-2 mode, only after flip */}
+      {mode === 'due' && (
+        <Animated.View style={[
+          styles.gradeArea,
+          { opacity: gradeOpacity, transform: [{ translateY: gradeTranslate }] }
+        ]}
+          pointerEvents={flipped ? 'auto' : 'none'}
+        >
+          <Text style={styles.gradeLabel}>Kendini nasıl değerlendiriyorsun?</Text>
+          <View style={styles.gradeRow}>
+            {GRADES.map(btn => (
+              <TouchableOpacity
+                key={btn.grade}
+                style={[styles.gradeBtn, { backgroundColor: btn.bg, borderColor: btn.color }]}
+                onPress={() => handleGrade(btn.grade)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.gradeBtnLabel, { color: btn.color }]}>{btn.label}</Text>
+                <Text style={styles.gradeBtnPreview}>{previews[btn.grade]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Animated.View>
+      )}
 
     </SafeAreaView>
   )
