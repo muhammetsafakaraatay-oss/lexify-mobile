@@ -2,8 +2,11 @@ const http = require('http')
 const httpProxy = require('http-proxy')
 const fetch = require('node-fetch')
 
-const EXPO_PORT = 3000
-const PORT = 5000
+const EXPO_PORT = Number(
+  process.env.EXPO_PORT ||
+  (process.env.REPL_ID || process.env.REPLIT_DEV_DOMAIN ? 3000 : 8081)
+)
+const PORT = Number(process.env.GATEWAY_PORT || 5000)
 const TARGET = 'https://lexitr.vercel.app'
 
 const proxy = httpProxy.createProxyServer({ ws: true })

@@ -1,10 +1,13 @@
 import { supabase } from './supabase'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   Grade,
   SrsState,
   Stage,
   applyGrade,
 } from './srs'
+
+const GUEST_SAVED_WORDS_KEY = 'guest_saved_words_v1'
 
 export interface SavedWord {
   id: string
@@ -55,6 +58,108 @@ async function getCurrentUserId(): Promise<string | null> {
   return user?.id ?? null
 }
 
+async function readGuestSavedWords(): Promise<SavedWord[]> {
+  try {
+    const raw = await AsyncStorage.getItem(GUEST_SAVED_WORDS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed as SavedWord[] : []
+  } catch (error) {
+    console.warn('[data] readGuestSavedWords failed:', error)
+    return []
+  }
+}
+
+async function writeGuestSavedWords(words: SavedWord[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(GUEST_SAVED_WORDS_KEY, JSON.stringify(words))
+  } catch (error) {
+    console.warn('[data] writeGuestSavedWords failed:', error)
+  }
+}
+
+function ensureGuestSavedWordDefaults(word: Partial<SavedWord> & Pick<SavedWord, 'word'>): SavedWord {
+  const now = new Date().toISOString()
+  const normalized = word.word.trim()
+  const id = word.id ?? `guest-${normalized.toLowerCase()}`
+
+  return {
+    id,
+    user_id: word.user_id ?? 'guest',
+    word: normalized,
+    translation: word.translation,
+    context: word.context,
+    example: word.example,
+    ipa: word.ipa,
+    cefr: word.cefr,
+    source_title: word.source_title,
+    source_url: word.source_url,
+    source_type: word.source_type,
+    mastered: word.mastered ?? false,
+    review_count: word.review_count ?? 0,
+    created_at: word.created_at ?? now,
+    ease: word.ease ?? 2.5,
+    interval_days: word.interval_days ?? 0,
+    repetitions: word.repetitions ?? 0,
+    lapses: word.lapses ?? 0,
+    due_at: word.due_at ?? now,
+    last_reviewed_at: word.last_reviewed_at ?? null,
+    stage: word.stage ?? 'new',
+  }
+}
+
+export async function upsertSavedWord(input: Partial<SavedWord> & Pick<SavedWord, 'word'>): Promise<SavedWord | null> {
+  const userId = await getCurrentUserId()
+
+  if (!userId) {
+    const words = await readGuestSavedWords()
+    const candidate = ensureGuestSavedWordDefaults({ ...input, user_id: 'guest' })
+    const existingIndex = words.findIndex((item) => item.word.toLowerCase() === candidate.word.toLowerCase())
+    const next = [...words]
+
+    if (existingIndex >= 0) {
+      next[existingIndex] = {
+        ...next[existingIndex],
+        ...candidate,
+        id: next[existingIndex].id,
+        created_at: next[existingIndex].created_at ?? candidate.created_at,
+      }
+      await writeGuestSavedWords(next)
+      return next[existingIndex]
+    }
+
+    next.unshift(candidate)
+    await writeGuestSavedWords(next)
+    return candidate
+  }
+
+  const payload = {
+    user_id: userId,
+    word: input.word,
+    translation: input.translation,
+    context: input.context,
+    example: input.example,
+    ipa: input.ipa,
+    cefr: input.cefr,
+    source_title: input.source_title,
+    source_url: input.source_url,
+    source_type: input.source_type,
+  }
+
+  const { data, error } = await supabase
+    .from('saved_words')
+    .upsert(payload, { onConflict: 'user_id,word' })
+    .select()
+    .single()
+
+  if (error) {
+    console.warn('[data] upsertSavedWord failed:', error.message)
+    return null
+  }
+
+  return data as SavedWord
+}
+
 export function dedupeWords(words: SavedWord[]): SavedWord[] {
   return words.filter((word, index, arr) =>
     arr.findIndex((item) => item.word.toLowerCase() === word.word.toLowerCase()) === index
@@ -72,7 +177,27 @@ export async function listSavedWords(options?: {
   search?: string
 }): Promise<SavedWord[]> {
   const userId = await getCurrentUserId()
-  if (!userId) return []
+  if (!userId) {
+    let localWords = await readGuestSavedWords()
+    if (options?.search) {
+      const q = options.search.toLowerCase()
+      localWords = localWords.filter((item) =>
+        item.word.toLowerCase().includes(q) ||
+        (item.translation ?? '').toLowerCase().includes(q)
+      )
+    }
+
+    const orderBy = options?.orderBy ?? 'created_at'
+    const direction = options?.ascending ? 1 : -1
+    localWords = [...localWords].sort((a, b) => {
+      const av = String((a as any)[orderBy] ?? '')
+      const bv = String((b as any)[orderBy] ?? '')
+      return av.localeCompare(bv) * direction
+    })
+
+    if (options?.limit) localWords = localWords.slice(0, options.limit)
+    return localWords
+  }
 
   let query = supabase
     .from('saved_words')
@@ -109,6 +234,12 @@ export async function listUniqueSavedWords(options?: {
 }
 
 export async function deleteSavedWord(id: string): Promise<void> {
+  const userId = await getCurrentUserId()
+  if (!userId) {
+    const words = await readGuestSavedWords()
+    await writeGuestSavedWords(words.filter((word) => word.id !== id))
+    return
+  }
   const { error } = await supabase.from('saved_words').delete().eq('id', id)
   if (error) console.warn('[data] deleteSavedWord failed:', error.message)
 }
@@ -123,7 +254,13 @@ export async function deleteSavedWord(id: string): Promise<void> {
  */
 export async function listDueWords(limit = 20): Promise<SavedWord[]> {
   const userId = await getCurrentUserId()
-  if (!userId) return []
+  if (!userId) {
+    const now = new Date().toISOString()
+    return (await readGuestSavedWords())
+      .filter((item) => item.stage !== 'mastered' && item.due_at <= now)
+      .sort((a, b) => a.due_at.localeCompare(b.due_at))
+      .slice(0, limit)
+  }
 
   const now = new Date().toISOString()
   const { data, error } = await supabase
@@ -148,7 +285,12 @@ export async function listDueWords(limit = 20): Promise<SavedWord[]> {
  */
 export async function listNewWords(limit = 5): Promise<SavedWord[]> {
   const userId = await getCurrentUserId()
-  if (!userId) return []
+  if (!userId) {
+    return (await readGuestSavedWords())
+      .filter((item) => item.stage === 'new')
+      .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      .slice(0, limit)
+  }
 
   const { data, error } = await supabase
     .from('saved_words')
@@ -176,7 +318,15 @@ export interface DueCount {
  */
 export async function getDueCount(): Promise<DueCount> {
   const userId = await getCurrentUserId()
-  if (!userId) return { due: 0, newWords: 0, learning: 0 }
+  if (!userId) {
+    const now = new Date().toISOString()
+    const words = await readGuestSavedWords()
+    return {
+      due: words.filter((item) => item.stage !== 'mastered' && item.due_at <= now).length,
+      newWords: words.filter((item) => item.stage === 'new').length,
+      learning: words.filter((item) => item.stage === 'learning').length,
+    }
+  }
 
   const now = new Date().toISOString()
 
@@ -236,7 +386,6 @@ export function srsStateOf(word: SavedWord): SrsState {
  */
 export async function gradeWord(word: SavedWord, grade: Grade): Promise<SavedWord | null> {
   const userId = await getCurrentUserId()
-  if (!userId) return null
 
   const now = new Date()
   const next = applyGrade(toSrsState(word), grade, now)
@@ -252,6 +401,17 @@ export async function gradeWord(word: SavedWord, grade: Grade): Promise<SavedWor
     // legacy compat ↓
     mastered: next.stage === 'mastered',
     review_count: next.repetitions,
+  }
+
+  if (!userId) {
+    const words = await readGuestSavedWords()
+    const nextWord = {
+      ...word,
+      ...update,
+    } as SavedWord
+    const merged = words.map((item) => item.id === word.id ? nextWord : item)
+    await writeGuestSavedWords(merged)
+    return nextWord
   }
 
   const { data, error } = await supabase

@@ -1,4 +1,5 @@
 import { Platform } from 'react-native'
+import { WEB_GATEWAY_BASE } from './config'
 
 let _currentAudio: HTMLAudioElement | null = null
 
@@ -15,7 +16,7 @@ export function speak(text: string, options?: { rate?: number; language?: string
       }
 
       // Use proxy TTS endpoint — Google Translate pronunciation audio
-      const url = `/tts?text=${encodeURIComponent(text)}&lang=${lang}`
+      const url = `${WEB_GATEWAY_BASE}/tts?text=${encodeURIComponent(text)}&lang=${lang}`
       const audio = new Audio(url)
       _currentAudio = audio
 

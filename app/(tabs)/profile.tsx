@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
+import { listSavedWords } from '../../lib/data'
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null)
@@ -23,11 +24,46 @@ export default function ProfileScreen() {
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    setUser(user)
-
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    if (!user) {
+      const words = await listSavedWords({ orderBy: 'created_at', ascending: false })
+      const dist: Record<string, number> = {}
+      words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
+
+      let streak = 0
+      const sortedDates = [...new Set(words.map((w: any) => (w.created_at ?? '').split('T')[0]).filter(Boolean))].sort().reverse()
+      let checkDate = new Date().toISOString().split('T')[0]
+      for (const date of sortedDates) {
+        if (date === checkDate) {
+          streak++
+          const d = new Date(checkDate)
+          d.setDate(d.getDate() - 1)
+          checkDate = d.toISOString().split('T')[0]
+        } else break
+      }
+
+      setStats({
+        total: words.length,
+        mastered: words.filter((w: any) => w.stage === 'mastered').length,
+        today: words.filter((w: any) => (w.created_at ?? '').startsWith(today)).length,
+        week: words.filter((w: any) => (w.created_at ?? '') >= weekAgo).length,
+        streak,
+      })
+      setCefrDist(dist)
+      setRecentWords(
+        words
+          .filter((w: any) => w.stage !== 'mastered')
+          .sort((a: any, b: any) => (a.repetitions ?? 0) - (b.repetitions ?? 0))
+          .slice(0, 3)
+      )
+      setRecentHistory([])
+      setLoading(false)
+      return
+    }
+
+    setUser(user)
 
     const [all, todayRes, weekRes, historyRes] = await Promise.all([
       supabase.from('saved_words').select('*').eq('user_id', user.id),
@@ -216,10 +252,12 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.signOutBtn} onPress={() => supabase.auth.signOut()}>
-          <Ionicons name="log-out-outline" size={20} color="#f87171" />
-          <Text style={styles.signOutText}>Çıkış Yap</Text>
-        </TouchableOpacity>
+        {user ? (
+          <TouchableOpacity style={styles.signOutBtn} onPress={() => supabase.auth.signOut()}>
+            <Ionicons name="log-out-outline" size={20} color="#f87171" />
+            <Text style={styles.signOutText}>Çıkış Yap</Text>
+          </TouchableOpacity>
+        ) : null}
 
       </ScrollView>
     </SafeAreaView>

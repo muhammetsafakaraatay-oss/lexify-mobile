@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { getWordOfDay, WordOfDayPayload } from '../../lib/api'
-import { getDueCount, ReadingHistoryItem } from '../../lib/data'
+import { getDueCount, listSavedWords, ReadingHistoryItem } from '../../lib/data'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { useRouter } from 'expo-router'
@@ -30,11 +30,47 @@ export default function DashboardScreen() {
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    setUser(user)
-
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    if (!user) {
+      const [words, due] = await Promise.all([
+        listSavedWords({ orderBy: 'created_at', ascending: false }),
+        getDueCount(),
+      ])
+
+      let streak = 0
+      const sortedDates = [...new Set(words.map((w: any) => (w.created_at ?? '').split('T')[0]).filter(Boolean))].sort().reverse()
+      let checkDate = new Date().toISOString().split('T')[0]
+      for (const date of sortedDates) {
+        if (date === checkDate) {
+          streak++
+          const d = new Date(checkDate)
+          d.setDate(d.getDate() - 1)
+          checkDate = d.toISOString().split('T')[0]
+        } else break
+      }
+
+      setStats({
+        total: words.length,
+        mastered: words.filter((w) => w.stage === 'mastered').length,
+        today: words.filter((w) => (w.created_at ?? '').startsWith(today)).length,
+        week: words.filter((w) => (w.created_at ?? '') >= weekAgo).length,
+        streak,
+      })
+      setDueCount(due)
+
+      try {
+        setWordOfDay(await getWordOfDay())
+      } catch (e) {
+        console.warn('[dashboard] getWordOfDay failed:', e)
+      }
+
+      setLoading(false)
+      return
+    }
+
+    setUser(user)
 
     const [totalRes, masteredRes, todayRes, weekRes, historyRes, allWordsRes, due] = await Promise.all([
       supabase.from('saved_words').select('id', { count: 'exact', head: true }).eq('user_id', user.id),

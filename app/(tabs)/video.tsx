@@ -6,15 +6,96 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import YoutubePlayer from 'react-native-youtube-iframe'
 import { WordTipSheet } from '../../components/WordTipSheet'
-import { fetchYoutubeTranscript, TranscriptSegment } from '../../lib/api'
+import { fetchYoutubeTranscript, TranscriptPayload, TranscriptSegment } from '../../lib/api'
 import { useWordTip } from '../../hooks/useWordTip'
 import { colors } from '../../lib/theme'
 import { tokenizeText } from '../../lib/tokenize'
 import { Ionicons } from '@expo/vector-icons'
 
+const SENTENCE_SPLIT_REGEX = /(?<=[.!?])\s+|\n+/g
+const MAX_SEGMENT_CHARS = 220
+
+function splitLongText(text: string) {
+  const chunks: string[] = []
+  const sentences = text
+    .split(SENTENCE_SPLIT_REGEX)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (sentences.length === 0) {
+    return text
+      .match(new RegExp(`.{1,${MAX_SEGMENT_CHARS}}`, 'g'))
+      ?.map((part) => part.trim())
+      .filter(Boolean) ?? []
+  }
+
+  let buffer = ''
+  for (const sentence of sentences) {
+    const candidate = buffer ? `${buffer} ${sentence}` : sentence
+    if (candidate.length <= MAX_SEGMENT_CHARS) {
+      buffer = candidate
+      continue
+    }
+
+    if (buffer) chunks.push(buffer)
+    if (sentence.length <= MAX_SEGMENT_CHARS) {
+      buffer = sentence
+      continue
+    }
+
+    const hardParts = sentence
+      .match(new RegExp(`.{1,${MAX_SEGMENT_CHARS}}`, 'g'))
+      ?.map((part) => part.trim())
+      .filter(Boolean) ?? []
+    chunks.push(...hardParts)
+    buffer = ''
+  }
+
+  if (buffer) chunks.push(buffer)
+  return chunks
+}
+
+function normalizeTranscript(payload: TranscriptPayload): TranscriptSegment[] {
+  const rawSegments = payload.segments ?? []
+
+  if (rawSegments.length > 0) {
+    const normalized: TranscriptSegment[] = []
+
+    for (const segment of rawSegments) {
+      const pieces = splitLongText(segment.text)
+      if (pieces.length <= 1) {
+        normalized.push(segment)
+        continue
+      }
+
+      const sliceDuration = Math.max(1200, Math.floor(segment.duration / pieces.length))
+      pieces.forEach((piece, index) => {
+        normalized.push({
+          text: piece,
+          offset: segment.offset + (sliceDuration * index),
+          duration: sliceDuration,
+        })
+      })
+    }
+
+    return normalized
+  }
+
+  const fullText = payload.text?.trim()
+  if (!fullText) return []
+
+  const pieces = splitLongText(fullText)
+  return pieces.map((piece, index) => ({
+    text: piece,
+    offset: index * 4000,
+    duration: 4000,
+  }))
+}
+
 export default function VideoScreen() {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [videoId, setVideoId] = useState('')
   const [segments, setSegments] = useState<TranscriptSegment[]>([])
   const [currentTime, setCurrentTime] = useState(0)
@@ -26,13 +107,20 @@ export default function VideoScreen() {
   async function handleFetch() {
     if (!url.trim()) return
     setLoading(true)
+    setError('')
     try {
       const data = await fetchYoutubeTranscript(url)
-      if (data.segments) {
-        setSegments(data.segments)
+      const normalizedSegments = normalizeTranscript(data)
+      if (normalizedSegments.length > 0) {
+        setSegments(normalizedSegments)
         setVideoId(data.videoId || '')
+      } else {
+        setError('Transcript alınamadı. Farklı bir YouTube videosu deneyin.')
       }
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      console.error(e)
+      setError('Video işlenemedi. Linki ve altyazı durumunu kontrol edin.')
+    }
     finally { setLoading(false) }
   }
 
@@ -80,6 +168,13 @@ export default function VideoScreen() {
               }
             </TouchableOpacity>
           </View>
+
+          {error ? (
+            <View style={styles.errorCard}>
+              <Ionicons name="alert-circle-outline" size={16} color="#f87171" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.infoCard}>
             {[
@@ -158,6 +253,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 36, fontWeight: '800', color: colors.text, marginBottom: 8 },
   subtitle: { color: colors.textMuted, fontSize: 15, lineHeight: 22, marginBottom: 24 },
   urlRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(248,113,113,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.24)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: { color: '#fda4af', flex: 1, fontSize: 13, lineHeight: 19 },
   infoCard: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 16, gap: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   infoText: { color: colors.textMuted, fontSize: 13 },
