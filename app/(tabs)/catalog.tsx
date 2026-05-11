@@ -58,10 +58,17 @@ export default function CatalogScreen() {
         keyExtractor={i => i}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.filterBtn, selectedLevel === item && styles.filterBtnActive]}
+            style={[
+              styles.filterBtn,
+              selectedLevel === item && styles.filterBtnActive,
+              selectedLevel === item && item !== 'Tümü' && { backgroundColor: cefrColors[item], borderColor: cefrColors[item] },
+            ]}
             onPress={() => setSelectedLevel(item)}
           >
-            <Text style={[styles.filterText, selectedLevel === item && { color: colors.bg }]}>{item}</Text>
+            <Text style={[
+              styles.filterText,
+              selectedLevel === item && { color: item === 'Tümü' ? colors.bg : '#000' },
+            ]}>{item}</Text>
           </TouchableOpacity>
         )}
       />

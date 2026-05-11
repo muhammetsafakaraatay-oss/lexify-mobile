@@ -10,6 +10,7 @@ import { fetchYoutubeTranscript, TranscriptSegment } from '../../lib/api'
 import { useWordTip } from '../../hooks/useWordTip'
 import { colors } from '../../lib/theme'
 import { tokenizeText } from '../../lib/tokenize'
+import { Ionicons } from '@expo/vector-icons'
 
 export default function VideoScreen() {
   const [url, setUrl] = useState('')
@@ -59,19 +60,38 @@ export default function VideoScreen() {
     <SafeAreaView style={styles.container}>
       {!videoId ? (
         <View style={styles.inputArea}>
-          <Text style={styles.title}>Video Oku</Text>
+          <Text style={styles.title}>Video<Text style={{ color: colors.accent }}>.</Text></Text>
+          <Text style={styles.subtitle}>YouTube linkini yapıştır, transcript üzerinden kelime öğren.</Text>
+
           <View style={styles.urlRow}>
             <TextInput
               style={styles.urlInput}
-              placeholder="YouTube URL..."
+              placeholder="YouTube URL gir..."
               placeholderTextColor={colors.textMuted}
               value={url}
               onChangeText={setUrl}
               autoCapitalize="none"
+              keyboardType="url"
             />
             <TouchableOpacity style={styles.urlBtn} onPress={handleFetch} disabled={loading}>
-              {loading ? <ActivityIndicator color={colors.bg} size="small" /> : <Text style={styles.urlBtnText}>Getir</Text>}
+              {loading
+                ? <ActivityIndicator color={colors.bg} size="small" />
+                : <Ionicons name="arrow-forward" size={20} color={colors.bg} />
+              }
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.infoCard}>
+            {[
+              { icon: 'logo-youtube', text: 'YouTube linkini yapıştır' },
+              { icon: 'hand-left-outline', text: 'Transcript\'e kelimeye dokun' },
+              { icon: 'bookmark-outline', text: 'Kaydet ve flashcard\'a ekle' },
+            ].map(({ icon, text }) => (
+              <View key={icon} style={styles.infoRow}>
+                <Ionicons name={icon as any} size={15} color={colors.accent} />
+                <Text style={styles.infoText}>{text}</Text>
+              </View>
+            ))}
           </View>
         </View>
       ) : (
@@ -135,11 +155,14 @@ export default function VideoScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   inputArea: { flex: 1, padding: 24, paddingTop: 48 },
-  title: { fontSize: 28, fontWeight: '800', color: colors.text, marginBottom: 24 },
-  urlRow: { flexDirection: 'row', gap: 8 },
+  title: { fontSize: 36, fontWeight: '800', color: colors.text, marginBottom: 8 },
+  subtitle: { color: colors.textMuted, fontSize: 15, lineHeight: 22, marginBottom: 24 },
+  urlRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  infoCard: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 16, gap: 12 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoText: { color: colors.textMuted, fontSize: 13 },
   urlInput: { flex: 1, backgroundColor: colors.bgSurface, borderRadius: 10, padding: 12, color: colors.text, fontSize: 14, borderWidth: 1, borderColor: colors.border },
-  urlBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center' },
-  urlBtnText: { color: colors.bg, fontWeight: '700', fontSize: 14 },
+  urlBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', width: 48 },
   video: { width: '100%', height: 220, backgroundColor: '#000' },
   backBtn: { padding: 12 },
   backBtnText: { color: colors.accent, fontSize: 15 },

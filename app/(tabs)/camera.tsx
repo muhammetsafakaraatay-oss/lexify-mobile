@@ -68,11 +68,11 @@ export default function CameraScreen() {
   if (mode === 'result') return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { setMode('camera'); setTokens([]) }}>
-          <Text style={styles.backBtn}>← Geri</Text>
+        <TouchableOpacity onPress={() => { setMode('camera'); setTokens([]) }} style={styles.backBtnWrap}>
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tanınan Metin</Text>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={styles.textArea}>
         <Text style={styles.readText}>
@@ -98,7 +98,9 @@ export default function CameraScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>📷 Kamera ile Tara</Text>
+        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Kamera ile Tara</Text>
+        <View style={{ width: 40 }} />
       </View>
       <CameraView ref={cameraRef} style={styles.camera} facing="back">
         <View style={styles.overlay}>
@@ -130,7 +132,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: colors.bg },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  backBtn: { color: colors.accent, fontSize: 16 },
+  backBtnWrap: { padding: 4 },
   camera: { flex: 1 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scanBox: { width: 280, height: 180, borderWidth: 2, borderColor: colors.accent, borderRadius: 12 },

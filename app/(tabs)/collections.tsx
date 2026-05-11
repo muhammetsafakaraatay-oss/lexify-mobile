@@ -54,11 +54,7 @@ export default function CollectionsScreen() {
   async function openCollection(col: any) {
     setSelected(col)
     setWordsLoading(true)
-    if (['favorites', 'later', 'hard'].includes(col.id)) {
-      setWords(await listSavedWords())
-    } else {
-      setWords(await listWordsForCollection(col.id))
-    }
+    setWords(await listWordsForCollection(col.id))
     setWordsLoading(false)
   }
 
@@ -141,7 +137,7 @@ export default function CollectionsScreen() {
             <Text style={styles.sheetTitle}>Yeni Liste</Text>
             <TextInput
               style={styles.input}
-              placeholder="Liste adi..."
+              placeholder="Liste adı..."
               placeholderTextColor={colors.textMuted}
               value={newName}
               onChangeText={setNewName}

@@ -30,7 +30,7 @@ export default function SearchScreen() {
       <View style={styles.searchRow}>
         <TextInput
           style={styles.input}
-          placeholder="Kelime veya ceviri ara..."
+          placeholder="Kelime veya çeviri ara..."
           placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -47,7 +47,8 @@ export default function SearchScreen() {
         <ActivityIndicator color={colors.accent} style={{ marginTop: 48 }} />
       ) : searched && results.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Sonuc bulunamadi</Text>
+          <Ionicons name="search-outline" size={40} color={colors.textMuted} />
+          <Text style={styles.emptyText}>Sonuç bulunamadı</Text>
         </View>
       ) : (
         <FlatList
@@ -70,8 +71,8 @@ export default function SearchScreen() {
                   <Text style={styles.translation}>{item.translation}</Text>
                   {item.context ? <Text style={styles.context} numberOfLines={1}>{item.context}</Text> : null}
                 </View>
-                <TouchableOpacity onPress={() => speak(item.word, { rate: 0.8 })}>
-                  <Text style={{ fontSize: 20 }}>🔊</Text>
+                <TouchableOpacity style={styles.speakBtn} onPress={() => speak(item.word, { rate: 0.8 })}>
+                  <Ionicons name="volume-medium-outline" size={20} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -88,8 +89,9 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 8 },
   input: { flex: 1, backgroundColor: colors.bgSurface, borderRadius: 10, padding: 12, color: colors.text, fontSize: 15, borderWidth: 1, borderColor: colors.border },
   searchBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 16, justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { color: colors.textMuted, fontSize: 16 },
+  speakBtn: { padding: 6 },
   card: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border },
   cardMain: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   word: { fontSize: 18, fontWeight: '700', color: colors.text },
