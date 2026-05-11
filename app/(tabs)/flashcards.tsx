@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
-  SavedWord, listDueWords, listNewWords,
+  SavedWord, listDueWords, listNewWords, listSavedWords,
   gradeWord, getDueCount, srsStateOf,
 } from '../../lib/data'
 import { Grade, previewGradeLabel } from '../../lib/srs'
@@ -50,34 +50,42 @@ export default function FlashcardsScreen() {
   const [results, setResults] = useState<ResultRecord[]>([])
   const [streak, setStreak] = useState(0)
   const [counts, setCounts] = useState({ due: 0, newWords: 0, learning: 0 })
+  const [mode, setMode] = useState<'due' | 'all'>('due')
 
   const flipAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(0)).current
   const gradeRowAnim = useRef(new Animated.Value(0)).current
 
-  useEffect(() => { loadQueue() }, [])
+  useEffect(() => { loadQueue('due') }, [])
 
-  const loadQueue = useCallback(async () => {
+  const loadQueue = useCallback(async (loadMode: 'due' | 'all' = 'due') => {
     setLoading(true)
     setFinished(false)
     setResults([])
     setStreak(0)
     setCurrent(0)
     setFlipped(false)
+    setMode(loadMode)
     flipAnim.setValue(0)
     gradeRowAnim.setValue(0)
 
-    const [dueCount, due, newer] = await Promise.all([
-      getDueCount(), listDueWords(20), listNewWords(5),
-    ])
-    setCounts(dueCount)
+    let merged: SavedWord[] = []
 
-    const merged: SavedWord[] = []
-    const seen = new Set<string>()
-    for (const w of due) { if (!seen.has(w.id)) { merged.push(w); seen.add(w.id) } }
-    for (const w of newer) {
-      if (merged.length >= 20) break
-      if (!seen.has(w.id)) { merged.push(w); seen.add(w.id) }
+    if (loadMode === 'all') {
+      const all = await listSavedWords()
+      // Shuffle so it's not always the same order
+      merged = [...all].sort(() => Math.random() - 0.5).slice(0, 50)
+    } else {
+      const [dueCount, due, newer] = await Promise.all([
+        getDueCount(), listDueWords(20), listNewWords(5),
+      ])
+      setCounts(dueCount)
+      const seen = new Set<string>()
+      for (const w of due) { if (!seen.has(w.id)) { merged.push(w); seen.add(w.id) } }
+      for (const w of newer) {
+        if (merged.length >= 20) break
+        if (!seen.has(w.id)) { merged.push(w); seen.add(w.id) }
+      }
     }
 
     setQueue(merged)
@@ -183,6 +191,11 @@ export default function FlashcardsScreen() {
             <Text style={styles.finishEmpty}>Şu an gözden geçirilecek kelime yok.{'\n'}Yeni kelimeler kaydet veya yarın gel.</Text>
           )}
 
+          <TouchableOpacity style={styles.allWordsBtn} onPress={() => loadQueue('all')}>
+            <Ionicons name="layers-outline" size={18} color={colors.accent} />
+            <Text style={styles.allWordsBtnText}>Tüm Kelimeleri Çalış</Text>
+          </TouchableOpacity>
+
           {hardest.length > 0 && (
             <View style={styles.hardestBox}>
               <Text style={styles.hardestTitle}>En çok zorlandıkların</Text>
@@ -195,11 +208,13 @@ export default function FlashcardsScreen() {
             </View>
           )}
 
-          <Text style={styles.tomorrowHint}>
-            SM-2 algoritması tekrar aralıklarını güncelledi
-          </Text>
+          {mode === 'due' && (
+            <Text style={styles.tomorrowHint}>
+              SM-2 algoritması tekrar aralıklarını güncelledi
+            </Text>
+          )}
 
-          <TouchableOpacity style={styles.restartBtn} onPress={loadQueue}>
+          <TouchableOpacity style={styles.restartBtn} onPress={() => loadQueue(mode)}>
             <Ionicons name="refresh-outline" size={18} color={colors.bg} />
             <Text style={styles.restartBtnText}>Tekrar Başlat</Text>
           </TouchableOpacity>
@@ -230,6 +245,12 @@ export default function FlashcardsScreen() {
             <View style={styles.streakPill}>
               <Text style={styles.streakFire}>🔥</Text>
               <Text style={styles.streakNum}>{streak}</Text>
+            </View>
+          )}
+          {mode === 'all' && (
+            <View style={styles.modePill}>
+              <Ionicons name="layers-outline" size={11} color={colors.accent} />
+              <Text style={styles.modeText}>SERBEST</Text>
             </View>
           )}
         </View>
@@ -438,4 +459,18 @@ const styles = StyleSheet.create({
   tomorrowHint: { color: colors.textMuted, fontSize: 12, marginBottom: 24, textAlign: 'center' },
   restartBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: 14, paddingHorizontal: 32, paddingVertical: 15 },
   restartBtnText: { color: colors.bg, fontWeight: '800', fontSize: 16 },
+
+  allWordsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: colors.accent, borderRadius: 14,
+    paddingHorizontal: 28, paddingVertical: 13, marginBottom: 20,
+  },
+  allWordsBtnText: { color: colors.accent, fontWeight: '700', fontSize: 15 },
+
+  modePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(250,204,21,0.1)', borderRadius: 999,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  modeText: { color: colors.accent, fontWeight: '800', fontSize: 10, letterSpacing: 0.6 },
 })
