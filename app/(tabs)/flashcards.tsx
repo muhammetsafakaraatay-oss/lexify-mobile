@@ -27,17 +27,19 @@ const GRADES: { grade: Grade; label: string; color: string; bg: string }[] = [
   { grade: 'easy',  label: 'Kolay',  color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
 ]
 
-function stageLabel(stage: SavedWord['stage']) {
+function stageLabel(stage: SavedWord['stage'] | undefined) {
   const map: Record<string, string> = {
     new: 'YENİ', learning: 'ÖĞRENİLİYOR', review: 'TEKRAR', mastered: 'ÖĞRENİLDİ', leech: 'ZOR KELİME',
   }
+  if (!stage) return 'YENİ'
   return map[stage] ?? stage.toUpperCase()
 }
 
-function stageColor(stage: SavedWord['stage']) {
+function stageColor(stage: SavedWord['stage'] | undefined) {
   const map: Record<string, string> = {
     new: '#60a5fa', learning: '#facc15', review: '#4ade80', mastered: '#e879f9', leech: '#f87171',
   }
+  if (!stage) return '#60a5fa'
   return map[stage] ?? colors.textMuted
 }
 
