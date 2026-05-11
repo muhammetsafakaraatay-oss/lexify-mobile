@@ -10,10 +10,10 @@ import { Ionicons } from '@expo/vector-icons'
 WebBrowser.maybeCompleteAuthSession()
 
 const FEATURES = [
-  { icon: 'book-outline', text: 'Makalelerden kelime öğren' },
-  { icon: 'layers-outline', text: 'SM-2 ile aralıklı tekrar' },
-  { icon: 'bar-chart-outline', text: 'CEFR seviyeni takip et' },
-  { icon: 'camera-outline', text: 'Kamerayla metin tara' },
+  { icon: 'book-outline' as const, text: 'Makale & Video', sub: 'Gerçek içerikle öğren' },
+  { icon: 'layers-outline' as const, text: 'SM-2 Tekrar', sub: 'Aralıklı tekrar sistemi' },
+  { icon: 'bar-chart-outline' as const, text: 'CEFR Takip', sub: 'Seviyeni ölç ve geliştir' },
+  { icon: 'camera-outline' as const, text: 'Kamera OCR', sub: 'Metni tara, anında çevir' },
 ]
 
 export default function LoginScreen() {
@@ -63,23 +63,30 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.glow} />
+      <View style={styles.accentBar} />
 
-      <View style={styles.top}>
-        <View style={styles.logoWrap}>
-          <View style={styles.logoDot} />
+      <View style={styles.hero}>
+        <View style={styles.logoRow}>
+          <View style={styles.logoMark}>
+            <Text style={styles.logoMarkText}>L</Text>
+          </View>
           <Text style={styles.logoText}>Lexify</Text>
         </View>
-        <Text style={styles.tagline}>İngilizce okurken kelime öğren</Text>
+
+        <Text style={styles.headline}>İngilizce öğrenmek{'\n'}hiç bu kadar kolay olmamıştı</Text>
+        <Text style={styles.tagline}>
+          Gerçek makaleler, videolar ve kamera ile bağlamında öğren. SM-2 algoritması seni takip eder.
+        </Text>
       </View>
 
-      <View style={styles.featureList}>
-        {FEATURES.map(({ icon, text }) => (
-          <View key={icon} style={styles.featureRow}>
-            <View style={styles.featureIcon}>
-              <Ionicons name={icon as any} size={16} color={colors.accent} />
+      <View style={styles.featureGrid}>
+        {FEATURES.map(({ icon, text, sub }) => (
+          <View key={icon} style={styles.featureCard}>
+            <View style={styles.featureIconWrap}>
+              <Ionicons name={icon} size={20} color={colors.accent} />
             </View>
-            <Text style={styles.featureText}>{text}</Text>
+            <Text style={styles.featureTitle}>{text}</Text>
+            <Text style={styles.featureSub}>{sub}</Text>
           </View>
         ))}
       </View>
@@ -126,69 +133,140 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
-    paddingHorizontal: 28,
-    paddingTop: 80,
-    paddingBottom: 48,
+    paddingHorizontal: 24,
+    paddingTop: 64,
+    paddingBottom: 40,
     justifyContent: 'space-between',
   },
-  glow: {
+
+  accentBar: {
     position: 'absolute',
-    top: -100,
-    left: '50%',
-    marginLeft: -180,
-    width: 360,
-    height: 360,
-    borderRadius: 180,
-    backgroundColor: 'rgba(250,204,21,0.06)',
-  },
-  top: { alignItems: 'flex-start' },
-  logoWrap: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 12 },
-  logoDot: {
-    width: 12, height: 12, borderRadius: 6,
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
     backgroundColor: colors.accent,
-    marginRight: 6, marginBottom: 10,
   },
-  logoText: { fontSize: 52, fontWeight: '800', color: colors.text, letterSpacing: -2 },
-  tagline: { fontSize: 17, color: colors.textMuted, lineHeight: 25, maxWidth: 260 },
 
-  featureList: {
-    gap: 14,
-    paddingVertical: 12,
+  hero: {
+    paddingTop: 8,
   },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  featureIcon: {
-    width: 36, height: 36, borderRadius: 10,
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 28,
+  },
+  logoMark: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoMarkText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.bg,
+    letterSpacing: -1,
+  },
+  logoText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -1,
+  },
+  headline: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+    marginBottom: 12,
+  },
+  tagline: {
+    fontSize: 14,
+    color: colors.textMuted,
+    lineHeight: 22,
+  },
+
+  featureGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  featureCard: {
+    width: '47%',
+    backgroundColor: colors.bgCard,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  featureIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     backgroundColor: colors.accentDim,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(250,204,21,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.2)',
   },
-  featureText: { color: colors.text, fontSize: 15, fontWeight: '500' },
+  featureTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  featureSub: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+  },
 
-  bottom: { gap: 14 },
+  bottom: {
+    gap: 12,
+  },
   errorBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: 'rgba(248,113,113,0.08)',
-    borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)',
-    borderRadius: 12, padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.3)',
+    borderRadius: 12,
+    padding: 12,
   },
   errorText: { color: '#f87171', fontSize: 13, flex: 1 },
 
   googleBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, backgroundColor: colors.accent,
-    borderRadius: 16, paddingVertical: 17,
-    shadowColor: colors.accent, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 12, elevation: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.accent,
+    borderRadius: 16,
+    paddingVertical: 16,
   },
   googleBtnDisabled: { opacity: 0.7 },
   googleIconWrap: {
-    width: 26, height: 26, borderRadius: 13,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#fff',
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   googleG: { fontSize: 15, fontWeight: '800', color: '#4285F4' },
   googleBtnText: { color: colors.bg, fontWeight: '800', fontSize: 16 },
 
-  legalText: { color: colors.textDim, fontSize: 11, textAlign: 'center', lineHeight: 17 },
+  legalText: {
+    color: colors.textDim,
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
   legalLink: { color: colors.textMuted, textDecorationLine: 'underline' },
 })
