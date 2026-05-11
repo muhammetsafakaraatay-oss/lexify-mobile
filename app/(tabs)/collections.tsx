@@ -45,14 +45,16 @@ export default function CollectionsScreen() {
     const cols = await listCollections()
     setCollections(cols)
 
-    const allCols = [...DEFAULT_COLLECTIONS, ...cols]
     const counts: Record<string, number> = {}
     await Promise.all(
-      allCols.map(async (c) => {
-        const ws = await listWordsForCollection(c.id)
-        counts[c.id] = ws.length
+      cols.map(async (c) => {
+        try {
+          const ws = await listWordsForCollection(c.id)
+          counts[c.id] = ws.length
+        } catch { counts[c.id] = 0 }
       })
     )
+    DEFAULT_COLLECTIONS.forEach(c => { counts[c.id] = 0 })
     setWordCounts(counts)
     setLoading(false)
   }
