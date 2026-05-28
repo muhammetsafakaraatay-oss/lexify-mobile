@@ -375,7 +375,34 @@ async function proxyToExternal(req, res) {
   }
 }
 
-app.all('/api/translate', proxyToExternal)
+// ── Translation cache (in-memory, 24h TTL) ───────────────────────────────────
+const _translateCache = new Map()
+const _TRANSLATE_TTL = 24 * 60 * 60 * 1000
+
+app.all('/api/translate', async (req, res) => {
+  const word = (req.body?.word || '').toLowerCase().trim()
+  if (word) {
+    const hit = _translateCache.get(word)
+    if (hit && Date.now() - hit.ts < _TRANSLATE_TTL) {
+      return res.json(hit.data)
+    }
+  }
+  try {
+    const response = await fetch(`${EXTERNAL_API}/api/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    })
+    const text = await response.text()
+    let data
+    try { data = JSON.parse(text) } catch { data = { tr: text } }
+    if (word && response.ok) _translateCache.set(word, { data, ts: Date.now() })
+    res.status(response.status).json(data)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.all('/api/fetch-article', proxyToExternal)
 app.all('/api/youtube-transcript', proxyToExternal)
 app.all('/api/articles', proxyToExternal)

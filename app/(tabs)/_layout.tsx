@@ -16,11 +16,11 @@ export default function TabsLayout() {
       <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen name="collections" options={{ href: null }} />
-      <Tabs.Screen name="quiz" options={{ href: null }} />
       <Tabs.Screen name="catalog" options={{ title: 'Keşfet', tabBarIcon: ({ color, size }) => <Ionicons name="compass-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="oku" options={{ title: 'Oku', tabBarIcon: ({ color, size }) => <Ionicons name="book-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="flashcards" options={{ title: 'Kartlar', tabBarIcon: ({ color, size }) => <Ionicons name="copy-outline" size={size} color={color} /> }} />
+      <Tabs.Screen name="quiz" options={{ title: 'Yaz', tabBarIcon: ({ color, size }) => <Ionicons name="create-outline" size={size} color={color} /> }} />
       <Tabs.Screen name="words" options={{ title: 'Kelimeler', tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} /> }} />
-      <Tabs.Screen name="flashcards" options={{ href: null }} />
       <Tabs.Screen name="camera" options={{ href: null }} />
       <Tabs.Screen name="video" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} /> }} />
