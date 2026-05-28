@@ -11,7 +11,7 @@ import {
 import { Grade, previewGradeLabel } from '../../lib/srs'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
-import { speak } from '../../lib/speech'
+import { speak, cancelSpeech } from '../../lib/speech'
 import { Ionicons } from '@expo/vector-icons'
 
 const { width, height } = Dimensions.get('window')
@@ -53,12 +53,27 @@ export default function FlashcardsScreen() {
   const [streak, setStreak] = useState(0)
   const [counts, setCounts] = useState({ due: 0, newWords: 0, learning: 0 })
   const [mode, setMode] = useState<'due' | 'all'>('due')
+  const [autoPlay, setAutoPlay] = useState(true)
+  const autoPlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const flipAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(0)).current
   const gradeRowAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => { loadQueue('due') }, [])
+
+  // Auto-speak when a new card appears (with short delay so animation starts first)
+  useEffect(() => {
+    if (!autoPlay || loading || finished || !queue[current]?.word) return
+    if (autoPlayTimer.current) clearTimeout(autoPlayTimer.current)
+    autoPlayTimer.current = setTimeout(() => {
+      speak(queue[current].word)
+    }, 350)
+    return () => { if (autoPlayTimer.current) clearTimeout(autoPlayTimer.current) }
+  }, [current, queue, loading, finished, autoPlay])
+
+  // Cancel speech on unmount
+  useEffect(() => () => { cancelSpeech() }, [])
 
   const loadQueue = useCallback(async (loadMode: 'due' | 'all' = 'due') => {
     setLoading(true)
@@ -275,8 +290,24 @@ export default function FlashcardsScreen() {
             </View>
           )}
         </View>
-        <View style={[styles.stagePill, { borderColor: stageColor(word.stage) }]}>
-          <Text style={[styles.stageText, { color: stageColor(word.stage) }]}>{stageLabel(word.stage)}</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[styles.autoPlayBtn, autoPlay && styles.autoPlayBtnOn]}
+            onPress={() => setAutoPlay(v => !v)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={autoPlay ? 'volume-high-outline' : 'volume-mute-outline'}
+              size={15}
+              color={autoPlay ? colors.accent : colors.textMuted}
+            />
+            <Text style={[styles.autoPlayText, autoPlay && styles.autoPlayTextOn]}>
+              {autoPlay ? 'OTO' : 'SES'}
+            </Text>
+          </TouchableOpacity>
+          <View style={[styles.stagePill, { borderColor: stageColor(word.stage) }]}>
+            <Text style={[styles.stageText, { color: stageColor(word.stage) }]}>{stageLabel(word.stage)}</Text>
+          </View>
         </View>
       </View>
 
@@ -409,6 +440,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 14,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  autoPlayBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderWidth: 1, borderColor: '#222', borderRadius: 999,
+    paddingHorizontal: 9, paddingVertical: 5,
+  },
+  autoPlayBtnOn: { borderColor: 'rgba(250,204,21,0.4)', backgroundColor: 'rgba(250,204,21,0.08)' },
+  autoPlayText: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.5 },
+  autoPlayTextOn: { color: colors.accent },
   progressText: { color: colors.textMuted, fontSize: 15, fontWeight: '700' },
   streakPill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(251,146,60,0.12)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   streakFire: { fontSize: 14 },
