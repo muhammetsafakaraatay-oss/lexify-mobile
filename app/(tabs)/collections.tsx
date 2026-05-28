@@ -11,7 +11,7 @@ import {
   listCollections,
   listWordsForCollection,
   SavedWord,
-} from '../../lib/data'
+} from '../../lib/dataApi'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'

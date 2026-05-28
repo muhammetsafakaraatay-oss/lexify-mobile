@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, SafeAreaView, ActivityIndicator
 } from 'react-native'
-import { deleteSavedWord, listUniqueSavedWords, SavedWord } from '../../lib/data'
+import { deleteSavedWord, listUniqueSavedWords, SavedWord } from '../../lib/dataApi'
 import { cefrColors, cefrLevels } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { speak } from '../../lib/speech'

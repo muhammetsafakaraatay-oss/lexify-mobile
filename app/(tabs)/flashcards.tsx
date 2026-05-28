@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   SavedWord, listDueWords, listNewWords, listSavedWords,
   gradeWord, getDueCount, srsStateOf,
-} from '../../lib/data'
+} from '../../lib/dataApi'
 import { Grade, previewGradeLabel } from '../../lib/srs'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'

@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image } from 'react-native'
 import { useFocusEffect, useRouter } from 'expo-router'
-import { supabase } from '../../lib/supabase'
+import { getCurrentUser, ReplitUser } from '../../lib/auth'
 import { getWordOfDay, WordOfDayPayload } from '../../lib/api'
-import { getDueCount, ReadingHistoryItem } from '../../lib/data'
+import { getDueCount, getStats, ReadingHistoryItem, listReadingHistory } from '../../lib/dataApi'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
@@ -14,7 +14,7 @@ interface Stats { total: number; today: number; week: number; mastered: number; 
 interface Due { due: number; newWords: number; learning: number }
 
 export default function DashboardScreen() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<ReplitUser | null>(null)
   const [stats, setStats] = useState<Stats>({ total: 0, today: 0, week: 0, mastered: 0, streak: 0 })
   const [due, setDue] = useState<Due>({ due: 0, newWords: 0, learning: 0 })
   const [wod, setWod] = useState<WordOfDayPayload | null>(null)
@@ -24,37 +24,23 @@ export default function DashboardScreen() {
   useFocusEffect(useCallback(() => { load() }, []))
 
   async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
     if (!user) return
     setUser(user)
-    const today = new Date().toISOString().split('T')[0]
-    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-    const [tot, mas, tod, wk, hist, all, dueR] = await Promise.all([
-      supabase.from('saved_words').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-      supabase.from('saved_words').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('stage', 'mastered'),
-      supabase.from('saved_words').select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', today),
-      supabase.from('saved_words').select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', weekAgo),
-      supabase.from('reading_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3),
-      supabase.from('saved_words').select('created_at').eq('user_id', user.id),
+    const [statsData, dueData, histData] = await Promise.all([
+      getStats(),
       getDueCount(),
+      listReadingHistory(),
     ])
-    const words = all.data || []
-    let streak = 0
-    const dates = [...new Set(words.map((w: any) => w.created_at.split('T')[0]))].sort().reverse()
-    let check = new Date().toISOString().split('T')[0]
-    for (const d of dates) {
-      if (d === check) { streak++; const dt = new Date(check); dt.setDate(dt.getDate() - 1); check = dt.toISOString().split('T')[0] }
-      else break
-    }
-    setStats({ total: tot.count ?? 0, mastered: mas.count ?? 0, today: tod.count ?? 0, week: wk.count ?? 0, streak })
-    setDue(dueR)
-    setHistory((hist.data ?? []) as ReadingHistoryItem[])
+    setStats(statsData)
+    setDue(dueData)
+    setHistory(histData.slice(0, 3))
     try { setWod(await getWordOfDay()) } catch {}
   }
 
-  const name = user?.user_metadata?.full_name?.split(' ')[0] || 'Kullanıcı'
-  const initials = (user?.user_metadata?.full_name || 'K').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-  const avatar = user?.user_metadata?.avatar_url
+  const name = user?.name?.split(' ')[0] || 'Kullanıcı'
+  const initials = (user?.name || 'K').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+  const avatar = user?.avatar_url
   const masteryPct = stats.total > 0 ? Math.round((stats.mastered / stats.total) * 100) : 0
   const totalDue = due.due + due.newWords
 
@@ -128,7 +114,7 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {/* ACTIONS — compact icon grid */}
+      {/* ACTIONS */}
       <Text style={S.sec}>BAŞLA</Text>
       <View style={S.iconGrid}>
         {([
@@ -214,19 +200,17 @@ export default function DashboardScreen() {
   )
 }
 
-const ICON_CELL = (SW - 40 - 40) / 6  // 6 items, 20px horizontal padding each side, 8px gap×5
+const ICON_CELL = (SW - 40 - 40) / 6
 
 const S = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingBottom: 56 },
-
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 17, fontWeight: '900', color: colors.bg },
   headerMid: { flex: 1 },
   greeting: { fontSize: 20, fontWeight: '800', color: colors.text },
   streak: { fontSize: 12, color: '#fb923c', fontWeight: '700', marginTop: 2 },
-
   hero: { marginHorizontal: 20, marginBottom: 14, backgroundColor: colors.accent, borderRadius: 20, padding: 20 },
   heroLabel: { color: 'rgba(0,0,0,0.4)', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 4 },
   heroTitle: { color: colors.bg, fontSize: 21, fontWeight: '900', marginBottom: 16 },
@@ -236,34 +220,27 @@ const S = StyleSheet.create({
   heroPillL: { color: 'rgba(0,0,0,0.45)', fontSize: 9, fontWeight: '700', marginTop: 1 },
   heroDivider: { width: 1, height: 26, backgroundColor: 'rgba(0,0,0,0.15)', marginHorizontal: 4 },
   heroArrow: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.15)', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
-
   heroDone: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 14, backgroundColor: 'rgba(74,222,128,0.07)', borderWidth: 1, borderColor: 'rgba(74,222,128,0.2)', borderRadius: 16, padding: 16 },
   heroDoneEmoji: { fontSize: 26 },
   heroDoneTitle: { color: '#4ade80', fontWeight: '700', fontSize: 14 },
   heroDoneSub: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
-
   statsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 14 },
   statBox: { flex: 1, backgroundColor: colors.bgCard, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingVertical: 11, alignItems: 'center' },
   statVal: { fontSize: 20, fontWeight: '900' },
   statLbl: { color: colors.textMuted, fontSize: 9, fontWeight: '700', marginTop: 2 },
-
   progRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 6 },
   progLbl: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   progPct: { color: '#e879f9', fontSize: 11, fontWeight: '800' },
   progTrack: { height: 5, marginHorizontal: 20, backgroundColor: '#1a1a1a', borderRadius: 3, overflow: 'hidden', marginBottom: 20 },
   progFill: { height: '100%', backgroundColor: '#e879f9', borderRadius: 3 },
-
   sec: { color: colors.textMuted, fontSize: 10, fontWeight: '900', letterSpacing: 1.5, paddingHorizontal: 20, marginBottom: 12 },
-
   iconGrid: { flexDirection: 'row', paddingHorizontal: 20, justifyContent: 'space-between', marginBottom: 20 },
   iconCell: { alignItems: 'center', width: ICON_CELL + 8, gap: 6 },
   iconCircle: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   iconLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700', textAlign: 'center' },
-
   quickScroll: { paddingHorizontal: 20, gap: 8, marginBottom: 20 },
   quickPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
   quickPillTxt: { color: colors.text, fontSize: 12, fontWeight: '600' },
-
   wod: { marginHorizontal: 20, marginBottom: 16, backgroundColor: '#0b0b18', borderRadius: 18, borderWidth: 1, borderColor: '#1c1c32', padding: 18 },
   wodEye: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 10 },
   wodRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 5 },
@@ -271,11 +248,9 @@ const S = StyleSheet.create({
   cefrTag: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   cefrTxt: { fontSize: 10, fontWeight: '800' },
   wodTr: { color: colors.textMuted, fontSize: 14 },
-
   histRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 8, backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border },
   histIco: { width: 28, height: 28, borderRadius: 8, backgroundColor: 'rgba(250,204,21,0.1)', alignItems: 'center', justifyContent: 'center' },
   histTitle: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
-
   empty: { marginHorizontal: 20, marginTop: 4, backgroundColor: colors.bgCard, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 26, alignItems: 'center' },
   emptyEmoji: { fontSize: 40, marginBottom: 10 },
   emptyTitle: { color: colors.text, fontSize: 17, fontWeight: '800', marginBottom: 6 },

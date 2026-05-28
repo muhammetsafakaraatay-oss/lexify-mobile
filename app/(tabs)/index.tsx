@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'expo-router'
 import { View } from 'react-native'
-import { supabase } from '../../lib/supabase'
+import { getCurrentUser } from '../../lib/auth'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export default function Index() {
@@ -14,8 +14,8 @@ export default function Index() {
         router.replace('/onboarding')
         return
       }
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) router.replace('/(tabs)/dashboard')
+      const user = await getCurrentUser()
+      if (user) router.replace('/(tabs)/dashboard')
       else router.replace('/auth/login')
     }
     check()

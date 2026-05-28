@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../../lib/supabase'
+import { getCurrentUser, signOut, ReplitUser } from '../../lib/auth'
 import { useRouter } from 'expo-router'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 
 export default function ProfileScreen() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<ReplitUser | null>(null)
   const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0, streak: 0 })
   const [cefrDist, setCefrDist] = useState<Record<string, number>>({})
   const [recentWords, setRecentWords] = useState<any[]>([])
@@ -19,35 +19,25 @@ export default function ProfileScreen() {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
     if (!user) { setLoading(false); return }
     setUser(user)
-
-    const today = new Date().toISOString().split('T')[0]
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-
-    const [all, todayRes, weekRes, historyRes] = await Promise.all([
-      supabase.from('saved_words').select('*').eq('user_id', user.id),
-      supabase.from('saved_words').select('id', { count: 'exact' }).eq('user_id', user.id).gte('created_at', today),
-      supabase.from('saved_words').select('id', { count: 'exact' }).eq('user_id', user.id).gte('created_at', weekAgo),
-      supabase.from('reading_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3),
-    ])
-
-    const words = all.data || []
-    const dist: Record<string, number> = {}
-    words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
-
-    let streak = 0
-    const sortedDates = [...new Set(words.map((w: any) => w.created_at.split('T')[0]))].sort().reverse()
-    let checkDate = new Date().toISOString().split('T')[0]
-    for (const date of sortedDates) {
-      if (date === checkDate) { streak++; const d = new Date(checkDate); d.setDate(d.getDate() - 1); checkDate = d.toISOString().split('T')[0] } else break
+    try {
+      const res = await fetch('/api/profile')
+      if (!res.ok) throw new Error('profile fetch failed')
+      const data = await res.json()
+      setStats(data.stats)
+      setCefrDist(data.cefrDist)
+      setRecentWords(
+        (data.words || [])
+          .filter((w: any) => w.stage !== 'mastered')
+          .sort((a: any, b: any) => (a.repetitions ?? 0) - (b.repetitions ?? 0))
+          .slice(0, 3)
+      )
+      setRecentHistory(data.recentHistory || [])
+    } catch (e) {
+      console.warn('profile load error:', e)
     }
-
-    setStats({ total: words.length, mastered: words.filter((w: any) => w.stage === 'mastered').length, today: todayRes.count || 0, week: weekRes.count || 0, streak })
-    setCefrDist(dist)
-    setRecentWords(words.filter((w: any) => w.stage !== 'mastered').sort((a: any, b: any) => (a.repetitions ?? 0) - (b.repetitions ?? 0)).slice(0, 3))
-    setRecentHistory(historyRes.data || [])
     setLoading(false)
   }
 
@@ -59,9 +49,9 @@ export default function ProfileScreen() {
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
 
-  const name = user?.user_metadata?.full_name || 'Kullanıcı'
+  const name = user?.name || 'Kullanıcı'
   const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-  const avatar = user?.user_metadata?.avatar_url
+  const avatar = user?.avatar_url
   const cefrOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
   const maxCefr = Math.max(...Object.values(cefrDist), 1)
   const masteryPct = stats.total > 0 ? Math.round((stats.mastered / stats.total) * 100) : 0
@@ -79,7 +69,6 @@ export default function ProfileScreen() {
             }
           </View>
           <Text style={styles.name}>{name}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
           {stats.streak > 0 && (
             <View style={styles.streakBadge}>
               <Text>🔥</Text>
@@ -202,7 +191,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Sign out */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={() => supabase.auth.signOut()}>
+        <TouchableOpacity style={styles.signOutBtn} onPress={() => signOut()}>
           <Ionicons name="log-out-outline" size={18} color="#f87171" />
           <Text style={styles.signOutText}>Çıkış Yap</Text>
         </TouchableOpacity>
@@ -216,21 +205,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   content: { padding: 20, paddingBottom: 48 },
-
   hero: { alignItems: 'center', paddingVertical: 24 },
   avatarWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   avatar: { width: 80, height: 80, borderRadius: 40 },
   avatarText: { fontSize: 30, fontWeight: '900', color: colors.bg },
   name: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 4 },
-  email: { fontSize: 13, color: colors.textMuted, marginBottom: 12 },
   streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.3)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
   streakText: { color: '#fb923c', fontWeight: '700', fontSize: 13 },
-
   statsGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   statCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: 14, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   statValue: { fontSize: 22, fontWeight: '800' },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 3, fontWeight: '600' },
-
   card: { backgroundColor: colors.bgCard, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   cardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
@@ -239,27 +224,22 @@ const styles = StyleSheet.create({
   masteryTrack: { height: 7, backgroundColor: '#1a1a1a', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
   masteryFill: { height: '100%', backgroundColor: '#e879f9', borderRadius: 4 },
   masterySub: { color: colors.textMuted, fontSize: 12 },
-
   wordRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
   wordRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   wordText: { fontSize: 15, fontWeight: '600', color: colors.text },
   wordIpa: { fontSize: 11, color: colors.textMuted, fontFamily: 'Courier', marginTop: 1 },
   wordTr: { fontSize: 13, color: colors.textMuted },
-
   historyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
   historyTitle: { flex: 1, fontSize: 14, color: colors.text },
   historyTime: { fontSize: 11, color: colors.textMuted },
-
   cefrRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cefrLabel: { width: 28, fontSize: 12, fontWeight: '800' },
   barBg: { flex: 1, height: 6, backgroundColor: '#1a1a1a', borderRadius: 3, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 3 },
   cefrCount: { width: 24, fontSize: 11, color: colors.textMuted, textAlign: 'right' },
-
   linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 13 },
   linkLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   linkText: { color: colors.text, fontSize: 15 },
-
   signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)', borderRadius: 14, padding: 14, marginTop: 4, backgroundColor: 'rgba(248,113,113,0.05)' },
   signOutText: { color: '#f87171', fontWeight: '600', fontSize: 15 },
 })

@@ -3,7 +3,7 @@ import { speak } from '../../lib/speech'
 
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, Easing } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { listUniqueSavedWords, SavedWord } from '../../lib/data'
+import { listUniqueSavedWords, SavedWord } from '../../lib/dataApi'
 import { colors } from '../../lib/theme'
 
 interface Slot { word: SavedWord; key: string; side: 'en' | 'tr' }

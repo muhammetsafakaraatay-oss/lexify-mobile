@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { listSavedWords, SavedWord } from '../../lib/data'
+import { listSavedWords, SavedWord } from '../../lib/dataApi'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'

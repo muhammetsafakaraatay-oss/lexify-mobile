@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { TranslationResult, translateWord } from '../lib/api'
-import { supabase } from '../lib/supabase'
+import { upsertSavedWord, deleteSavedWordByWord } from '../lib/dataApi'
 import { WordTipData } from '../components/WordTipSheet'
 
 interface SaveOptions {
@@ -39,11 +39,9 @@ export function useWordTip() {
     if (!tip?.word) return
 
     const key = tip.word.toLowerCase()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
     if (options?.toggleDelete && saved[key]) {
-      await supabase.from('saved_words').delete().eq('user_id', user.id).eq('word', tip.word)
+      await deleteSavedWordByWord(tip.word)
       setSaved((prev) => {
         const next = { ...prev }
         delete next[key]
@@ -52,8 +50,7 @@ export function useWordTip() {
       return
     }
 
-    await supabase.from('saved_words').upsert({
-      user_id: user.id,
+    await upsertSavedWord({
       word: tip.word,
       translation: tip.tr,
       context: options?.context ?? tip.context,
@@ -62,7 +59,7 @@ export function useWordTip() {
       source_title: options?.sourceTitle,
       source_url: options?.sourceUrl,
       source_type: options?.sourceType,
-    }, { onConflict: 'user_id,word' })
+    })
 
     setSaved((prev) => ({ ...prev, [key]: true }))
   }

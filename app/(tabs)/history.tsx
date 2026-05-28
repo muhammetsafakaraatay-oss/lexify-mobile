@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { View, Text, StyleSheet, FlatList, SafeAreaView, ActivityIndicator, TouchableOpacity } from 'react-native'
-import { deleteReadingHistoryItem, listReadingHistory, ReadingHistoryItem } from '../../lib/data'
+import { deleteReadingHistoryItem, listReadingHistory, ReadingHistoryItem } from '../../lib/dataApi'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 import { timeAgoTr } from '../../lib/time'

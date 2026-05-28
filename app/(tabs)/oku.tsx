@@ -6,7 +6,7 @@ import {
 } from 'react-native'
 import { WordTipSheet } from '../../components/WordTipSheet'
 import { useWordTip } from '../../hooks/useWordTip'
-import { supabase } from '../../lib/supabase'
+import { addReadingHistory } from '../../lib/dataApi'
 import { fetchArticle, fetchYoutubeTranscript } from '../../lib/api'
 import { colors } from '../../lib/theme'
 import { TextToken, tokenizeText } from '../../lib/tokenize'
@@ -98,15 +98,10 @@ export default function OkuScreen() {
 
   async function saveHistory(articleUrl: string, text: string) {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
       let title = articleUrl
       const titleMatch = text.match(/^([^.!?]{10,100})[.!?]/)
       if (titleMatch) title = titleMatch[1].trim()
-      await supabase.from('reading_history').insert({
-        user_id: user.id, url: articleUrl,
-        title: title, word_count: text.split(' ').length,
-      })
+      await addReadingHistory({ url: articleUrl, title, word_count: text.split(' ').length })
     } catch (e) {}
   }
 
@@ -372,10 +367,7 @@ const styles = StyleSheet.create({
   infoTitle: { color: colors.text, fontWeight: '800', fontSize: 15, marginBottom: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   infoText: { color: colors.textMuted, fontSize: 13 },
-  readerHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
+  readerHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { padding: 4 },
   readerTitleSmall: { color: colors.text, fontSize: 15, fontWeight: '700' },
   readerMeta: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
