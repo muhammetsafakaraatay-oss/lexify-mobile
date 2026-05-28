@@ -1,6 +1,6 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { speak } from '../lib/speech'
-import { cefrColors } from '../lib/cefr'
+import { cefrColors, cefrLabels } from '../lib/cefr'
 import { colors } from '../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -34,6 +34,9 @@ function typeLabel(type?: string) {
 }
 
 export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps) {
+  const cefrInfo = tip?.cefr ? cefrLabels[tip.cefr] : null
+  const cefrColor = tip?.cefr ? cefrColors[tip.cefr] : null
+
   return (
     <Modal visible={!!tip} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalBg} onPress={onClose}>
@@ -47,15 +50,11 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
             </View>
           ) : tip ? (
             <>
+              {/* ── Word + IPA + speak ── */}
               <View style={styles.sheetHeader}>
                 <View style={{ flex: 1 }}>
                   <View style={styles.titleRow}>
                     <Text style={styles.sheetWord}>{tip.word}</Text>
-                    {tip.cefr ? (
-                      <View style={[styles.cefrBadge, { borderColor: cefrColors[tip.cefr] }]}>
-                        <Text style={[styles.cefrText, { color: cefrColors[tip.cefr] }]}>{tip.cefr}</Text>
-                      </View>
-                    ) : null}
                     {tip.type ? (
                       <View style={styles.typeBadge}>
                         <Text style={styles.typeText}>{typeLabel(tip.type)}</Text>
@@ -76,8 +75,27 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
                 ) : null}
               </View>
 
+              {/* ── Translation ── */}
               <Text style={styles.translation}>{tip.tr}</Text>
 
+              {/* ── CEFR block — prominent card ── */}
+              {tip.cefr && cefrInfo && cefrColor ? (
+                <View style={[styles.cefrCard, { borderColor: cefrColor + '55', backgroundColor: cefrColor + '12' }]}>
+                  <View style={styles.cefrCardLeft}>
+                    <View style={[styles.cefrBadgeLarge, { backgroundColor: cefrColor + '22', borderColor: cefrColor }]}>
+                      <Text style={[styles.cefrBadgeLargeText, { color: cefrColor }]}>{tip.cefr}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.cefrLevelName, { color: cefrColor }]}>
+                        {cefrInfo.tr} · <Text style={styles.cefrLevelNameEn}>{cefrInfo.en}</Text>
+                      </Text>
+                      <Text style={styles.cefrDesc}>{cefrInfo.desc}</Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* ── Context ── */}
               {tip.context ? (
                 <View style={styles.contextCard}>
                   <Text style={styles.contextLabel}>BAĞLAM</Text>
@@ -85,6 +103,7 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
                 </View>
               ) : null}
 
+              {/* ── Examples ── */}
               {tip.examples?.length ? (
                 <View style={styles.examples}>
                   <Text style={styles.examplesLabel}>ÖRNEKLER</Text>
@@ -101,6 +120,7 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
                 </View>
               ) : null}
 
+              {/* ── Save button ── */}
               <TouchableOpacity
                 style={[styles.saveBtn, saved && styles.saveBtnSaved]}
                 onPress={onSave}
@@ -132,23 +152,46 @@ const styles = StyleSheet.create({
   dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   loadingArea: { alignItems: 'center', paddingVertical: 36, gap: 14 },
   loadingText: { color: colors.textMuted, fontSize: 14 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+
+  sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 },
   sheetWord: { fontSize: 28, fontWeight: '800', color: colors.text },
-  cefrBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  cefrText: { fontSize: 11, fontWeight: '700' },
   typeBadge: { backgroundColor: '#1a1a1a', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   typeText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
   ipa: { color: colors.textMuted, fontSize: 14, fontFamily: 'Courier', marginTop: 2 },
   speakBtn: { padding: 4, marginLeft: 8 },
-  translation: { fontSize: 26, color: colors.accent, fontWeight: '700', marginBottom: 14 },
+
+  translation: { fontSize: 26, color: colors.accent, fontWeight: '700', marginBottom: 12 },
+
+  // CEFR card
+  cefrCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  cefrCardLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  cefrBadgeLarge: {
+    width: 48, height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cefrBadgeLargeText: { fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
+  cefrLevelName: { fontSize: 13, fontWeight: '800', marginBottom: 3 },
+  cefrLevelNameEn: { fontWeight: '500', fontSize: 12 },
+  cefrDesc: { fontSize: 12, color: colors.textDim, lineHeight: 17 },
+
   contextCard: { backgroundColor: '#141414', borderRadius: 12, padding: 12, marginBottom: 12 },
   contextLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 5 },
   context: { color: colors.textDim, fontSize: 13, lineHeight: 20 },
+
   examples: { marginBottom: 16 },
   examplesLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 8 },
   exampleRow: { flexDirection: 'row', gap: 8, marginBottom: 7 },
   example: { flex: 1, color: colors.textMuted, fontSize: 13, lineHeight: 20 },
+
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: 14, padding: 15, marginTop: 4 },
   saveBtnSaved: { backgroundColor: '#181818', borderWidth: 1, borderColor: '#2a2a2a' },
   saveBtnText: { color: colors.bg, fontWeight: '800', fontSize: 15 },
