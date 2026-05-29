@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Lexify Logo Önizleme</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+    background: #080808;
+    color: #e9d5ff;
+    padding: 48px 32px 96px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, #c084fc, #f0abfc, #22d3ee);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .sub { color: #a78bfa; margin: 0 0 40px; font-size: 14px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #15101f;
+    border: 1px solid #2d1b4d;
+    border-radius: 20px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  .card .label {
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #a78bfa;
+  }
+  .card.light { background: #f5f3ff; border-color: #ddd6fe; }
+  .card.light .label { color: #6d28d9; }
+  .icon-lg img { width: 220px; height: 220px; border-radius: 50px; }
+  .icon-sm img { width: 96px; height: 96px; border-radius: 22px; }
+  .wordmark img { width: 100%; max-width: 480px; height: auto; }
+  .mark img { width: 180px; height: 180px; }
+
+  .row-mock {
+    display: flex; align-items: center; gap: 14px;
+    background: #0a0612; padding: 14px 18px; border-radius: 16px;
+    border: 1px solid #2d1b4d; width: 100%;
+  }
+  .row-mock img { width: 56px; height: 56px; border-radius: 14px; }
+  .row-mock .t1 { font-weight: 700; color: #f0abfc; }
+  .row-mock .t2 { font-size: 12px; color: #a78bfa; }
+</style>
+</head>
+<body>
+
+  <h1>Lexify · Logo Önizleme</h1>
+  <p class="sub">Modern minimalist · Mor + neon · SVG</p>
+
+  <div class="grid">
+
+    <div class="card icon-lg">
+      <div class="label">App Icon · 1024px</div>
+      <img src="lexify-icon.svg" alt="Lexify Icon">
+    </div>
+
+    <div class="card icon-sm">
+      <div class="label">Home Screen · 96px</div>
+      <img src="lexify-icon.svg" alt="Lexify Icon Small">
+      <div class="row-mock">
+        <img src="lexify-icon.svg" alt="">
+        <div>
+          <div class="t1">Lexify</div>
+          <div class="t2">Kelime tarama & öğrenme</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mark">
+      <div class="label">Mark · Şeffaf</div>
+      <img src="lexify-mark.svg" alt="Lexify Mark">
+    </div>
+
+    <div class="card light mark">
+      <div class="label">Mark · Açık Zemin</div>
+      <img src="lexify-mark.svg" alt="Lexify Mark Light">
+    </div>
+
+    <div class="card wordmark" style="grid-column: 1 / -1;">
+      <div class="label">Yatay Logo · Wordmark</div>
+      <img src="lexify-wordmark.svg" alt="Lexify Wordmark">
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { speak } from '../lib/speech'
 import { cefrColors } from '../lib/cefr'
 import { colors } from '../lib/theme'
@@ -14,6 +14,12 @@ export interface WordTipData {
   ipa?: string
   cefr?: string
   loading?: boolean
+  error?: string
+  reunion?: {
+    sourceTitle?: string
+    translation?: string
+    savedAt?: string
+  }
 }
 
 interface WordTipSheetProps {
@@ -21,6 +27,7 @@ interface WordTipSheetProps {
   saved: boolean
   onClose: () => void
   onSave: () => void
+  onRetry?: () => void
 }
 
 function typeLabel(type?: string) {
@@ -33,7 +40,7 @@ function typeLabel(type?: string) {
   return map[type.toLowerCase()] || type
 }
 
-export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps) {
+export function WordTipSheet({ tip, saved, onClose, onSave, onRetry }: WordTipSheetProps) {
   return (
     <Modal visible={!!tip} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalBg} onPress={onClose}>
@@ -76,7 +83,50 @@ export function WordTipSheet({ tip, saved, onClose, onSave }: WordTipSheetProps)
                 ) : null}
               </View>
 
-              <Text style={styles.translation}>{tip.tr}</Text>
+              <View style={styles.translationRow}>
+                <Text style={styles.translation}>{tip.tr || 'Anlam alınamadı'}</Text>
+                {tip.tr && tip.word && !tip.error ? (
+                  <TouchableOpacity
+                    hitSlop={10}
+                    onPress={() => {
+                      void Share.share({
+                        message: `${tip.word} — ${tip.tr}`,
+                      })
+                    }}
+                  >
+                    <Ionicons name="share-outline" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {tip.error ? (
+                <View style={styles.errorCard}>
+                  <Ionicons name="alert-circle-outline" size={16} color="#fda4af" style={{ marginTop: 1 }} />
+                  <Text style={styles.errorText}>{tip.error}</Text>
+                </View>
+              ) : null}
+
+              {tip.error && onRetry ? (
+                <TouchableOpacity style={styles.retryBtn} onPress={onRetry}>
+                  <Ionicons name="refresh-outline" size={16} color={colors.accent} />
+                  <Text style={styles.retryText}>Tekrar dene</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {tip.reunion ? (
+                <View style={styles.reunionCard}>
+                  <Ionicons name="sparkles-outline" size={16} color={colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reunionTitle}>Bağlam Köprüsü</Text>
+                    <Text style={styles.reunionText}>
+                      Bu kelimeyi daha önce
+                      {tip.reunion.sourceTitle ? ` ${tip.reunion.sourceTitle}` : ' başka bir içerikte'}
+                      {' '}kaydetmiştin.
+                      {tip.reunion.translation ? ` Anlamı: ${tip.reunion.translation}.` : ''}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
 
               {tip.context ? (
                 <View style={styles.contextCard}>
@@ -141,7 +191,46 @@ const styles = StyleSheet.create({
   typeText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
   ipa: { color: colors.textMuted, fontSize: 14, fontFamily: 'Courier', marginTop: 2 },
   speakBtn: { padding: 4, marginLeft: 8 },
-  translation: { fontSize: 26, color: colors.accent, fontWeight: '700', marginBottom: 14 },
+  translationRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
+  translation: { flex: 1, fontSize: 26, color: colors.accent, fontWeight: '700' },
+  errorCard: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(248,113,113,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.24)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  errorText: { flex: 1, color: '#fda4af', fontSize: 12, lineHeight: 18 },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.35)',
+    backgroundColor: colors.accentDim,
+  },
+  retryText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
+  reunionCard: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+    backgroundColor: colors.accentDim,
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.28)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  reunionTitle: { color: colors.accent, fontSize: 11, fontWeight: '800', marginBottom: 4, letterSpacing: 0.5 },
+  reunionText: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   contextCard: { backgroundColor: '#141414', borderRadius: 12, padding: 12, marginBottom: 12 },
   contextLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 5 },
   context: { color: colors.textDim, fontSize: 13, lineHeight: 20 },

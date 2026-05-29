@@ -1,0 +1,69 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a0b2e"/>
+      <stop offset="50%" stop-color="#2d0b5a"/>
+      <stop offset="100%" stop-color="#4c1d95"/>
+    </linearGradient>
+    <linearGradient id="lGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e9d5ff"/>
+      <stop offset="55%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#f0abfc"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="55%" stop-color="#e9d5ff"/>
+      <stop offset="100%" stop-color="#f0abfc"/>
+    </linearGradient>
+    <linearGradient id="ifyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <filter id="softGlow2" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="topHL2" cx="25%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Icon block (left) -->
+  <g transform="translate(40, 40)">
+    <rect width="280" height="280" rx="64" fill="url(#iconBgGrad)"/>
+    <rect width="280" height="280" rx="64" fill="url(#topHL2)"/>
+
+    <!-- Mini text lines -->
+    <g opacity="0.8">
+      <rect x="140" y="84" width="84" height="10" rx="5" fill="#22d3ee" opacity="0.85"/>
+      <rect x="140" y="108" width="64" height="10" rx="5" fill="#a78bfa" opacity="0.70"/>
+      <rect x="140" y="132" width="74" height="10" rx="5" fill="#22d3ee" opacity="0.55"/>
+      <rect x="140" y="156" width="50" height="10" rx="5" fill="#a78bfa" opacity="0.40"/>
+    </g>
+
+    <!-- Stylized "L" -->
+    <g filter="url(#softGlow2)">
+      <rect x="70" y="62" width="38" height="138" rx="19" fill="url(#lGrad2)"/>
+      <rect x="70" y="184" width="128" height="38" rx="19" fill="url(#lGrad2)"/>
+    </g>
+
+    <!-- Sparkle dot -->
+    <g filter="url(#softGlow2)">
+      <circle cx="226" cy="70" r="8" fill="#f0abfc"/>
+      <circle cx="226" cy="70" r="3.5" fill="#ffffff"/>
+    </g>
+  </g>
+
+  <!-- Wordmark: "Lexify" -->
+  <g transform="translate(370, 245)" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="180" letter-spacing="-6">
+    <text x="0" y="0" fill="url(#textGrad)">Lex</text>
+    <text x="305" y="0" fill="url(#ifyGrad)">ify</text>
+  </g>
+
+  <!-- Subtle neon underline under "ify" -->
+  <rect x="675" y="262" width="158" height="6" rx="3" fill="url(#ifyGrad)" opacity="0.9"/>
+</svg>

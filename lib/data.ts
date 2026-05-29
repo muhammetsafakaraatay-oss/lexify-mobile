@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { callLLM } from './ai/llmClient'
 import {
   Grade,
   SrsState,
@@ -8,6 +9,8 @@ import {
 } from './srs'
 
 const GUEST_SAVED_WORDS_KEY = 'guest_saved_words_v1'
+const GUEST_READING_HISTORY_KEY = 'guest_reading_history_v1'
+const MAX_GUEST_HISTORY = 30
 
 export interface SavedWord {
   id: string
@@ -21,6 +24,12 @@ export interface SavedWord {
   source_title?: string
   source_url?: string
   source_type?: string
+  context_sentence?: string
+  context_paragraph?: string
+  cefr_level?: string
+  topic_tags?: string[]
+  saved_at?: string
+  last_seen_in_reading_at?: string
   /** @deprecated `stage === 'mastered'` kullanın. Geriye uyum için tutuluyor. */
   mastered?: boolean
   /** @deprecated `repetitions` kullanın. Geriye uyum için tutuluyor. */
@@ -35,6 +44,80 @@ export interface SavedWord {
   due_at: string // ISO string
   last_reviewed_at: string | null
   stage: Stage
+}
+
+const TOPIC_TAGS = [
+  'technology',
+  'business',
+  'science',
+  'politics',
+  'sports',
+  'culture',
+  'health',
+  'environment',
+  'lifestyle',
+  'general',
+] as const
+
+function hashText(input: string): string {
+  let hash = 0
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0
+  }
+  return hash.toString(16)
+}
+
+function normalizeTopicTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['general']
+  const allowed = new Set<string>(TOPIC_TAGS)
+  const tags = value
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter((item) => allowed.has(item))
+  return tags.length ? Array.from(new Set(tags)).slice(0, 3) : ['general']
+}
+
+async function classifyWordTopics(params: {
+  userId?: string
+  word: string
+  contextSentence: string
+}): Promise<string[]> {
+  const sentence = params.contextSentence.trim()
+  if (!sentence) return ['general']
+
+  const cacheKey = `topic:${hashText(`${params.word.toLowerCase()}::${sentence.toLowerCase()}`)}`
+  const prompt = [
+    'You are a content classifier.',
+    `Sentence: "${sentence}"`,
+    `Target word: "${params.word}"`,
+    `Allowed tags: ${TOPIC_TAGS.join(', ')}`,
+    'Return strict JSON: {"tags":["tag1","tag2"]}',
+  ].join('\n')
+
+  const response = await callLLM({
+    feature: 'topic_classify',
+    userId: params.userId,
+    model: 'gpt-4o-mini',
+    cacheKey,
+    cacheTTL: 60 * 60 * 24 * 30,
+    maxRetries: 1,
+    messages: [
+      {
+        role: 'system',
+        content: 'Return only JSON with tags from allowed list.',
+      },
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+  })
+
+  try {
+    const parsed = JSON.parse(response.content)
+    return normalizeTopicTags(parsed?.tags)
+  } catch {
+    return ['general']
+  }
 }
 
 export interface ReadingHistoryItem {
@@ -110,7 +193,13 @@ function ensureGuestSavedWordDefaults(word: Partial<SavedWord> & Pick<SavedWord,
     cefr: word.cefr,
     source_title: word.source_title,
     source_url: word.source_url,
-    source_type: word.source_type,
+    source_type: word.source_type ?? 'legacy',
+    context_sentence: word.context_sentence ?? word.context,
+    context_paragraph: word.context_paragraph,
+    cefr_level: word.cefr_level ?? word.cefr,
+    topic_tags: word.topic_tags ?? ['general'],
+    saved_at: word.saved_at ?? now,
+    last_seen_in_reading_at: word.last_seen_in_reading_at,
     mastered: word.mastered ?? false,
     review_count: word.review_count ?? 0,
     created_at: word.created_at ?? now,
@@ -154,12 +243,16 @@ export async function upsertSavedWord(input: Partial<SavedWord> & Pick<SavedWord
     word: input.word,
     translation: input.translation,
     context: input.context,
+    context_sentence: input.context_sentence ?? input.context,
+    context_paragraph: input.context_paragraph,
     example: input.example,
     ipa: input.ipa,
     cefr: input.cefr,
+    cefr_level: input.cefr_level ?? input.cefr,
     source_title: input.source_title,
     source_url: input.source_url,
-    source_type: input.source_type,
+    source_type: input.source_type ?? 'legacy',
+    topic_tags: input.topic_tags,
   }
 
   const { data, error } = await supabase
@@ -173,13 +266,174 @@ export async function upsertSavedWord(input: Partial<SavedWord> & Pick<SavedWord
     return null
   }
 
-  return data as SavedWord
+  const saved = data as SavedWord
+
+  // Faz 0.3: Kayıt sonrası asenkron tema sınıflandırma.
+  const contextSentence = saved.context_sentence || saved.context || input.context || ''
+  if (contextSentence && (!saved.topic_tags || saved.topic_tags.length === 0)) {
+    void (async () => {
+      try {
+        const tags = await classifyWordTopics({
+          userId,
+          word: saved.word,
+          contextSentence,
+        })
+        await supabase
+          .from('saved_words')
+          .update({ topic_tags: tags })
+          .eq('id', saved.id)
+          .eq('user_id', userId)
+      } catch (topicError: any) {
+        console.warn('[data] topic classification failed:', topicError?.message || topicError)
+      }
+    })()
+  }
+
+  return saved
 }
 
 export function dedupeWords(words: SavedWord[]): SavedWord[] {
   return words.filter((word, index, arr) =>
     arr.findIndex((item) => item.word.toLowerCase() === word.word.toLowerCase()) === index
   )
+}
+
+/**
+ * Misafir modunda kaydedilen kelimeleri giriş sonrası Supabase hesabına taşır.
+ */
+export async function mergeGuestWordsIntoAccount(): Promise<{ merged: number }> {
+  const userId = await getCurrentUserId()
+  if (!userId) return { merged: 0 }
+
+  const guestWords = await readGuestSavedWords()
+  if (guestWords.length === 0) return { merged: 0 }
+
+  let merged = 0
+  for (const gw of guestWords) {
+    const normalized = gw.word.trim()
+    if (!normalized) continue
+
+    const { error } = await supabase
+      .from('saved_words')
+      .upsert(
+        {
+          user_id: userId,
+          word: normalized,
+          translation: gw.translation,
+          context: gw.context,
+          context_sentence: gw.context_sentence ?? gw.context,
+          context_paragraph: gw.context_paragraph,
+          example: gw.example,
+          ipa: gw.ipa,
+          cefr: gw.cefr,
+          cefr_level: gw.cefr_level ?? gw.cefr,
+          source_title: gw.source_title,
+          source_url: gw.source_url,
+          source_type: gw.source_type ?? 'legacy',
+          topic_tags: gw.topic_tags ?? ['general'],
+          saved_at: gw.saved_at ?? gw.created_at ?? new Date().toISOString(),
+          last_seen_in_reading_at: gw.last_seen_in_reading_at ?? null,
+          ease: gw.ease ?? 2.5,
+          interval_days: gw.interval_days ?? 0,
+          repetitions: gw.repetitions ?? 0,
+          lapses: gw.lapses ?? 0,
+          due_at: gw.due_at ?? new Date().toISOString(),
+          last_reviewed_at: gw.last_reviewed_at,
+          stage: gw.stage ?? 'new',
+        },
+        { onConflict: 'user_id,word' },
+      )
+
+    if (!error) merged++
+    else console.warn('[data] mergeGuestWords failed for', normalized, error.message)
+  }
+
+  await writeGuestSavedWords([])
+  return { merged }
+}
+
+async function readGuestReadingHistory(): Promise<ReadingHistoryItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(GUEST_READING_HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as ReadingHistoryItem[]) : []
+  } catch {
+    return []
+  }
+}
+
+async function writeGuestReadingHistory(items: ReadingHistoryItem[]): Promise<void> {
+  await AsyncStorage.setItem(GUEST_READING_HISTORY_KEY, JSON.stringify(items.slice(0, MAX_GUEST_HISTORY)))
+}
+
+export async function upsertReadingHistory(input: {
+  url?: string
+  title: string
+  word_count?: number
+}): Promise<void> {
+  const userId = await getCurrentUserId()
+  const title = input.title.trim() || 'Okuma'
+  const now = new Date().toISOString()
+
+  if (!userId) {
+    const list = await readGuestReadingHistory()
+    const existingIdx = input.url
+      ? list.findIndex((h) => h.url === input.url)
+      : -1
+    const item: ReadingHistoryItem = {
+      id: existingIdx >= 0 ? list[existingIdx].id : `guest-h-${Date.now()}`,
+      user_id: 'guest',
+      title,
+      url: input.url,
+      word_count: input.word_count,
+      created_at: now,
+    }
+    const next = existingIdx >= 0
+      ? [item, ...list.filter((_, i) => i !== existingIdx)]
+      : [item, ...list]
+    await writeGuestReadingHistory(next)
+    return
+  }
+
+  const { error } = await supabase.from('reading_history').insert({
+    user_id: userId,
+    url: input.url ?? null,
+    title,
+    word_count: input.word_count ?? null,
+  })
+  if (error) console.warn('[data] upsertReadingHistory failed:', error.message)
+}
+
+export async function mergeGuestReadingHistoryIntoAccount(): Promise<{ merged: number }> {
+  const userId = await getCurrentUserId()
+  if (!userId) return { merged: 0 }
+
+  const guestItems = await readGuestReadingHistory()
+  if (guestItems.length === 0) return { merged: 0 }
+
+  let merged = 0
+  for (const item of guestItems) {
+    const { error } = await supabase.from('reading_history').insert({
+      user_id: userId,
+      url: item.url ?? null,
+      title: item.title ?? 'Okuma',
+      word_count: item.word_count ?? null,
+    })
+    if (!error) merged++
+  }
+
+  await writeGuestReadingHistory([])
+  return { merged }
+}
+
+/** Misafir kelime + okuma geçmişini tek seferde hesaba taşır */
+export async function mergeGuestDataIntoAccount(): Promise<{ words: number; history: number }> {
+  const [words, history] = await Promise.all([
+    mergeGuestWordsIntoAccount(),
+    mergeGuestReadingHistoryIntoAccount(),
+  ])
+  return { words: words.merged, history: history.merged }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -261,6 +515,33 @@ export async function deleteSavedWord(id: string): Promise<void> {
   }
   const { error } = await supabase.from('saved_words').delete().eq('id', id)
   if (error) console.warn('[data] deleteSavedWord failed:', error.message)
+}
+
+export async function markSavedWordsSeenInReading(wordIds: string[]): Promise<void> {
+  const ids = Array.from(new Set(wordIds.filter(Boolean)))
+  if (!ids.length) return
+
+  const userId = await getCurrentUserId()
+  const now = new Date().toISOString()
+
+  if (!userId) {
+    const words = await readGuestSavedWords()
+    const next = words.map((item) =>
+      ids.includes(item.id)
+        ? { ...item, last_seen_in_reading_at: now }
+        : item,
+    )
+    await writeGuestSavedWords(next)
+    return
+  }
+
+  const { error } = await supabase
+    .from('saved_words')
+    .update({ last_seen_in_reading_at: now })
+    .eq('user_id', userId)
+    .in('id', ids)
+
+  if (error) console.warn('[data] markSavedWordsSeenInReading failed:', error.message)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -465,7 +746,9 @@ export async function updateSavedWordReview(
 
 export async function listReadingHistory(): Promise<ReadingHistoryItem[]> {
   const userId = await getCurrentUserId()
-  if (!userId) return []
+  if (!userId) {
+    return readGuestReadingHistory()
+  }
 
   const { data, error } = await supabase
     .from('reading_history')
@@ -481,6 +764,12 @@ export async function listReadingHistory(): Promise<ReadingHistoryItem[]> {
 }
 
 export async function deleteReadingHistoryItem(id: string): Promise<void> {
+  const userId = await getCurrentUserId()
+  if (!userId) {
+    const list = await readGuestReadingHistory()
+    await writeGuestReadingHistory(list.filter((h) => h.id !== id))
+    return
+  }
   const { error } = await supabase.from('reading_history').delete().eq('id', id)
   if (error) console.warn('[data] deleteReadingHistoryItem failed:', error.message)
 }

@@ -1,0 +1,821 @@
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import { useFocusEffect, useRouter } from 'expo-router'
+import {
+  View, Text, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Animated, Dimensions, ScrollView, Pressable, PanResponder,
+} from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import {
+  SavedWord, listDueWords, listNewWords, listSavedWords,
+  gradeWord, getDueCount, srsStateOf,
+} from '../../lib/data'
+import { Grade, previewGradeLabel } from '../../lib/srs'
+import { cefrColors } from '../../lib/cefr'
+import { colors } from '../../lib/theme'
+import { flashcardSessionLimit } from '../../lib/plan'
+import { usePremium } from '../../contexts/SubscriptionContext'
+import { speak } from '../../lib/speech'
+import { markJourneyStep } from '../../lib/journey'
+import { Ionicons } from '@expo/vector-icons'
+import {
+  StudyAmbient,
+  StudyTopBar,
+  StudyProgress,
+  StatChip,
+  SessionComplete,
+  CardStackShadow,
+} from '../../components/study/StudyChrome'
+
+const { width, height } = Dimensions.get('window')
+const CARD_W = Math.min(width - 40, 400)
+const CARD_H = Math.min(height * 0.44, 320)
+const SWIPE_THRESHOLD = Math.min(110, CARD_W * 0.24)
+
+interface ResultRecord { wordId: string; wordText: string; grade: Grade }
+
+const GRADES: {
+  grade: Grade
+  label: string
+  color: string
+  bg: string
+  icon: keyof typeof Ionicons.glyphMap
+}[] = [
+  { grade: 'again', label: 'Tekrar', color: '#f87171', bg: 'rgba(248,113,113,0.14)', icon: 'refresh' },
+  { grade: 'hard', label: 'Zor', color: '#fb923c', bg: 'rgba(251,146,60,0.14)', icon: 'time-outline' },
+  { grade: 'good', label: 'İyi', color: '#4ade80', bg: 'rgba(74,222,128,0.14)', icon: 'checkmark-circle' },
+  { grade: 'easy', label: 'Kolay', color: '#60a5fa', bg: 'rgba(96,165,250,0.14)', icon: 'flash' },
+]
+
+function stageLabel(stage: SavedWord['stage'] | undefined) {
+  const map: Record<string, string> = {
+    new: 'YENİ', learning: 'ÖĞRENİLİYOR', review: 'TEKRAR', mastered: 'ÖĞRENİLDİ', leech: 'ZOR KELİME',
+  }
+  if (!stage) return 'YENİ'
+  return map[stage] ?? stage.toUpperCase()
+}
+
+function stageColor(stage: SavedWord['stage'] | undefined) {
+  const map: Record<string, string> = {
+    new: '#60a5fa', learning: '#facc15', review: '#4ade80', mastered: '#e879f9', leech: '#f87171',
+  }
+  if (!stage) return '#60a5fa'
+  return map[stage] ?? colors.textMuted
+}
+
+export default function FlashcardsScreen() {
+  const router = useRouter()
+  const { isPro } = usePremium()
+  const [queue, setQueue] = useState<SavedWord[]>([])
+  const [current, setCurrent] = useState(0)
+  const [flipped, setFlipped] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [finished, setFinished] = useState(false)
+  const [results, setResults] = useState<ResultRecord[]>([])
+  const [streak, setStreak] = useState(0)
+  const [counts, setCounts] = useState({ due: 0, newWords: 0, learning: 0 })
+  const [mode, setMode] = useState<'due' | 'all'>('due')
+
+  const flipAnim = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(0)).current
+  const gradeRowAnim = useRef(new Animated.Value(0)).current
+  const dragX = useRef(new Animated.Value(0)).current
+  const dragY = useRef(new Animated.Value(0)).current
+  const processingSwipe = useRef(false)
+  const currentRef = useRef(0)
+  const queueLengthRef = useRef(0)
+
+  useEffect(() => { void loadQueue('due') }, [])
+  useEffect(() => { currentRef.current = current }, [current])
+  useEffect(() => { queueLengthRef.current = queue.length }, [queue.length])
+
+  useFocusEffect(
+    useCallback(() => {
+      void getDueCount().then(setCounts)
+    }, []),
+  )
+
+  const loadQueue = useCallback(async (loadMode: 'due' | 'all' = 'due') => {
+    setLoading(true)
+    setFinished(false)
+    setResults([])
+    setStreak(0)
+    setCurrent(0)
+    setFlipped(false)
+    setMode(loadMode)
+    flipAnim.setValue(0)
+    gradeRowAnim.setValue(0)
+    dragX.setValue(0)
+    dragY.setValue(0)
+
+    let merged: SavedWord[] = []
+
+    if (loadMode === 'all') {
+      const all = await listSavedWords()
+      // Shuffle so it's not always the same order
+      merged = [...all].sort(() => Math.random() - 0.5).slice(0, 50)
+    } else {
+      const [dueCount, due, newer] = await Promise.all([
+        getDueCount(), listDueWords(20), listNewWords(5),
+      ])
+      setCounts(dueCount)
+      const seen = new Set<string>()
+      for (const w of due) { if (!seen.has(w.id)) { merged.push(w); seen.add(w.id) } }
+      for (const w of newer) {
+        if (merged.length >= 20) break
+        if (!seen.has(w.id)) { merged.push(w); seen.add(w.id) }
+      }
+    }
+
+    const limited = merged.slice(0, flashcardSessionLimit(isPro, merged.length))
+    setQueue(limited)
+    queueLengthRef.current = limited.length
+    currentRef.current = 0
+    setLoading(false)
+    if (limited.length === 0) setFinished(true)
+  }, [flipAnim, gradeRowAnim, isPro])
+
+  function resetDrag() {
+    Animated.parallel([
+      Animated.spring(dragX, { toValue: 0, useNativeDriver: true, friction: 8, tension: 70 }),
+      Animated.spring(dragY, { toValue: 0, useNativeDriver: true, friction: 8, tension: 70 }),
+    ]).start()
+  }
+
+  function completeAdvance() {
+    flipAnim.setValue(0)
+    gradeRowAnim.setValue(0)
+    slideAnim.setValue(0)
+    dragX.setValue(0)
+    dragY.setValue(0)
+    setFlipped(false)
+
+    const nextIndex = currentRef.current + 1
+    currentRef.current = nextIndex
+    processingSwipe.current = false
+
+    if (nextIndex >= queueLengthRef.current) {
+      setFinished(true)
+      void markJourneyStep('flashcard')
+      return
+    }
+
+    setCurrent(nextIndex)
+  }
+
+  function advanceCard() {
+    Animated.timing(slideAnim, { toValue: 30, duration: 130, useNativeDriver: true }).start(completeAdvance)
+  }
+
+  function flipCard() {
+    if (processingSwipe.current) return
+    // In browse mode: if already flipped, advance to next card
+    if (flipped && mode === 'all') {
+      advanceCard()
+      return
+    }
+    if (flipped) return
+    Animated.spring(flipAnim, { toValue: 1, useNativeDriver: true, friction: 7, tension: 40 }).start(() => {
+      // Only show grade row in SM-2 mode
+      if (mode === 'due') {
+        Animated.spring(gradeRowAnim, { toValue: 1, useNativeDriver: true, friction: 8, tension: 60 }).start()
+      }
+    })
+    setFlipped(true)
+    const w = queue[current]
+    if (w?.word) speak(w.word)
+  }
+
+  async function handleGrade(grade: Grade) {
+    const word = queue[current]
+    if (!word) return
+    if (processingSwipe.current) return
+
+    setResults(prev => [...prev, { wordId: word.id, wordText: word.word, grade }])
+    setStreak(prev => grade === 'again' ? 0 : prev + 1)
+    gradeWord(word, grade).catch(e => console.warn('[flashcards] gradeWord failed:', e))
+
+    // Slide out + reset
+    processingSwipe.current = true
+    Animated.timing(slideAnim, { toValue: grade === 'again' ? -20 : 20, duration: 120, useNativeDriver: true }).start(completeAdvance)
+  }
+
+  function handleSwipe(direction: 'left' | 'right') {
+    if (processingSwipe.current) return
+
+    if (mode === 'due') {
+      const grade: Grade = direction === 'right' ? 'good' : 'again'
+      handleGrade(grade)
+      return
+    }
+
+    processingSwipe.current = true
+    const exit = direction === 'right' ? width + CARD_W : -(width + CARD_W)
+    Animated.parallel([
+      Animated.timing(dragX, {
+        toValue: exit,
+        duration: 170,
+        useNativeDriver: true,
+      }),
+      Animated.timing(dragY, {
+        toValue: 0,
+        duration: 170,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      dragX.setValue(0)
+      dragY.setValue(0)
+      advanceCard()
+    })
+  }
+
+  const word = queue[current]
+
+  const previews = useMemo(() => {
+    if (!word) return {} as Record<Grade, string>
+    const state = srsStateOf(word)
+    const now = new Date()
+    return GRADES.reduce((acc, btn) => {
+      acc[btn.grade] = previewGradeLabel(state, btn.grade, now)
+      return acc
+    }, {} as Record<Grade, string>)
+  }, [word])
+
+  const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
+  const backRotate  = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] })
+  const frontOpacity = flipAnim.interpolate({ inputRange: [0, 0.45, 0.55, 1], outputRange: [1, 1, 0, 0] })
+  const backOpacity  = flipAnim.interpolate({ inputRange: [0, 0.45, 0.55, 1], outputRange: [0, 0, 1, 1] })
+  const gradeOpacity = gradeRowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] })
+  const gradeTranslate = gradeRowAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] })
+  const swipeRotate = dragX.interpolate({
+    inputRange: [-CARD_W, 0, CARD_W],
+    outputRange: ['-10deg', '0deg', '10deg'],
+  })
+  const swipeHintOpacity = dragX.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, -16, 0, 16, SWIPE_THRESHOLD],
+    outputRange: [0.92, 0.18, 0, 0.18, 0.92],
+  })
+  const swipeLeftOpacity = dragX.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, -16, 0],
+    outputRange: [1, 0.18, 0],
+    extrapolate: 'clamp',
+  })
+  const swipeRightOpacity = dragX.interpolate({
+    inputRange: [0, 16, SWIPE_THRESHOLD],
+    outputRange: [0, 0.18, 1],
+    extrapolate: 'clamp',
+  })
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      return Math.abs(gesture.dx) > 6 || Math.abs(gesture.dy) > 6
+    },
+    onPanResponderMove: (_, gesture) => {
+      dragX.setValue(gesture.dx)
+      dragY.setValue(Math.max(-140, Math.min(140, gesture.dy * 0.55)))
+    },
+    onPanResponderRelease: (_, gesture) => {
+      if (Math.abs(gesture.dx) <= SWIPE_THRESHOLD) {
+        resetDrag()
+        return
+      }
+      handleSwipe(gesture.dx > 0 ? 'right' : 'left')
+    },
+    onPanResponderTerminate: resetDrag,
+  }), [dragX, dragY, mode])
+
+  // ── Loading ──────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StudyAmbient />
+        <View style={styles.center}>
+          <View style={styles.loadingRing}>
+            <ActivityIndicator color={colors.accent} size="large" />
+          </View>
+          <Text style={styles.loadingText}>Kartlar hazırlanıyor</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // ── Finished ─────────────────────────────────────────────────────────────
+  if (finished) {
+    const total = results.length
+    const known = results.filter(r => r.grade !== 'again').length
+    const accuracy = total > 0 ? Math.round((known / total) * 100) : 0
+    const hardestSeen = new Set<string>()
+    const hardest = results
+      .filter(r => r.grade === 'again' || r.grade === 'hard')
+      .filter(r => { if (hardestSeen.has(r.wordId)) return false; hardestSeen.add(r.wordId); return true })
+      .slice(0, 3).map(r => r.wordText)
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <StudyAmbient />
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <SessionComplete
+            icon={total === 0 ? 'checkmark-done' : accuracy >= 80 ? 'trophy' : 'sparkles'}
+            iconColor={total === 0 ? '#60a5fa' : accuracy >= 80 ? colors.accent : '#4ade80'}
+            title={total === 0 ? 'Bugün bitti' : 'Oturum tamamlandı'}
+            subtitle={
+              total === 0
+                ? 'Gözden geçirilecek kelime kalmadı. Yeni kelimeler kaydet veya yarın tekrar gel.'
+                : `${total} kart çalıştın · SM-2 tekrar planın güncellendi`
+            }
+            stats={
+              total > 0
+                ? [
+                    { label: 'Kart', value: String(total), color: colors.accent },
+                    { label: 'Doğruluk', value: `${accuracy}%`, color: '#4ade80' },
+                    { label: 'Seri', value: String(streak), color: '#fb923c' },
+                  ]
+                : []
+            }
+            primaryLabel="Tekrar Başlat"
+            onPrimary={() => loadQueue(mode)}
+            secondaryLabel="Tüm Kelimeleri Çalış"
+            onSecondary={() => loadQueue('all')}
+          >
+            {hardest.length > 0 ? (
+              <View style={styles.hardestBox}>
+                <Text style={styles.hardestTitle}>Tekrar önerilenler</Text>
+                {hardest.map((w, i) => (
+                  <View key={`${w}-${i}`} style={styles.hardestRow}>
+                    <Ionicons name="fitness-outline" size={14} color="#fb923c" />
+                    <Text style={styles.hardestItem}>{w}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </SessionComplete>
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
+
+  if (!word) return null
+
+  const isLeech = word.stage === 'leech'
+  const totalCards = queue.length
+  const remainingCards = Math.max(0, totalCards - current - 1)
+
+  // ── Main card ─────────────────────────────────────────────────────────────
+  return (
+    <SafeAreaView style={styles.container}>
+      <StudyAmbient />
+
+      <StudyTopBar
+        title="Flashcard"
+        subtitle={mode === 'due' ? 'SM-2 aralıklı tekrar' : 'Serbest çalışma'}
+        onBack={() => router.back()}
+        right={
+          <View style={[styles.stagePill, { borderColor: stageColor(word.stage) }]}>
+            <Text style={[styles.stageText, { color: stageColor(word.stage) }]}>{stageLabel(word.stage)}</Text>
+          </View>
+        }
+      />
+
+      <StudyProgress current={current + 1} total={queue.length} label="Oturum" />
+
+      <View style={styles.setMetaCard}>
+        <View>
+          <Text style={styles.setMetaEyebrow}>STUDY SET</Text>
+          <Text style={styles.setMetaTitle}>
+            {mode === 'due' ? 'Aralıklı tekrar destesi' : 'Tüm kayıtlı kelimeler'}
+          </Text>
+          <Text style={styles.setMetaSub}>
+            {mode === 'due'
+              ? 'Bildiklerini hızla geç, zorlandıklarını tekrar döngüsüne bırak.'
+              : 'Kartlara göz at, çevir ve istediğin hızda çalış.'}
+          </Text>
+        </View>
+        <View style={styles.setMetaCount}>
+          <Text style={styles.setMetaCountValue}>{remainingCards}</Text>
+          <Text style={styles.setMetaCountLabel}>kaldı</Text>
+        </View>
+      </View>
+
+      <View style={styles.modeSwitchRow}>
+        <TouchableOpacity
+          style={[styles.modeChip, mode === 'due' && styles.modeChipActive]}
+          onPress={() => loadQueue('due')}
+          activeOpacity={0.88}
+        >
+          <Ionicons name="refresh-circle-outline" size={14} color={mode === 'due' ? colors.bg : colors.textMuted} />
+          <Text style={[styles.modeChipText, mode === 'due' && styles.modeChipTextActive]}>Tekrar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeChip, mode === 'all' && styles.modeChipActive]}
+          onPress={() => loadQueue('all')}
+          activeOpacity={0.88}
+        >
+          <Ionicons name="albums-outline" size={14} color={mode === 'all' ? colors.bg : colors.textMuted} />
+          <Text style={[styles.modeChipText, mode === 'all' && styles.modeChipTextActive]}>Tüm Kartlar</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.statsRow}>
+        <StatChip icon="flame-outline" label="Seri" value={String(streak)} tint="#fb923c" />
+        <StatChip icon="albums-outline" label="Review" value={String(counts.due)} tint="#4ade80" />
+        <StatChip icon="sparkles-outline" label="Yeni" value={String(counts.newWords)} tint="#60a5fa" />
+      </View>
+
+      {/* Leech warning */}
+      {isLeech && (
+        <View style={styles.leechBanner}>
+          <Ionicons name="warning-outline" size={14} color="#fca5a5" />
+          <Text style={styles.leechText}>Bu kelime sana çok zor geliyor — örnekle birlikte ezberlemeyi dene.</Text>
+        </View>
+      )}
+
+      <View style={styles.cardArea}>
+        <View style={styles.cardStackWrap}>
+          <CardStackShadow />
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={{
+              transform: [
+                { translateX: Animated.add(slideAnim, dragX) },
+                { translateY: dragY },
+                { rotate: swipeRotate },
+              ],
+            }}
+          >
+            <Pressable onPress={flipCard} style={styles.cardWrapper}>
+
+            {/* Front */}
+            <Animated.View style={[
+              styles.card, styles.cardFront,
+              { opacity: frontOpacity, transform: [{ rotateY: frontRotate }] },
+            ]}>
+              <>
+                <Animated.View style={[styles.swipeBadge, styles.swipeBadgeLeft, { opacity: swipeLeftOpacity }]}>
+                  <Text style={styles.swipeBadgeText}>{mode === 'due' ? 'BİLMİYORUM' : 'GEÇ'}</Text>
+                </Animated.View>
+                <Animated.View style={[styles.swipeBadge, styles.swipeBadgeRight, { opacity: swipeRightOpacity }]}>
+                  <Text style={styles.swipeBadgeText}>{mode === 'due' ? 'BİLİYORUM' : 'SONRAKİ'}</Text>
+                </Animated.View>
+              </>
+              <View style={styles.cardTopRow}>
+                <View style={styles.faceLabelPill}>
+                  <Text style={styles.faceLabelText}>TERM</Text>
+                </View>
+                {word.cefr ? (
+                  <View style={[styles.cefrBadge, { borderColor: cefrColors[word.cefr] }]}>
+                    <Text style={[styles.cefrText, { color: cefrColors[word.cefr] }]}>{word.cefr}</Text>
+                  </View>
+                ) : <View />}
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation(); speak(word.word) }}
+                  style={styles.speakBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="volume-medium-outline" size={22} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.cardWord}>{word.word}</Text>
+              {word.ipa ? <Text style={styles.ipa}>/{word.ipa}/</Text> : null}
+
+              {word.lapses > 0 && (
+                <View style={styles.lapseBadge}>
+                  <Text style={styles.lapseText}>{word.lapses}× yanlış</Text>
+                </View>
+              )}
+
+              <View style={styles.flipHint}>
+                <View style={styles.flipHintPill}>
+                  <Ionicons name="hand-left-outline" size={14} color={colors.accent} />
+                  <Text style={styles.flipHintText}>Dokun → tanımı gör</Text>
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Back */}
+            <Animated.View style={[
+              styles.card, styles.cardBack,
+              { opacity: backOpacity, transform: [{ rotateY: backRotate }] }
+            ]}>
+              <>
+                <Animated.View style={[styles.swipeBadge, styles.swipeBadgeLeft, { opacity: swipeLeftOpacity }]}>
+                  <Text style={styles.swipeBadgeText}>{mode === 'due' ? 'BİLMİYORUM' : 'GEÇ'}</Text>
+                </Animated.View>
+                <Animated.View style={[styles.swipeBadge, styles.swipeBadgeRight, { opacity: swipeRightOpacity }]}>
+                  <Text style={styles.swipeBadgeText}>{mode === 'due' ? 'BİLİYORUM' : 'SONRAKİ'}</Text>
+                </Animated.View>
+              </>
+              <View style={styles.backHeaderRow}>
+                <View style={styles.faceLabelPillBack}>
+                  <Text style={styles.faceLabelTextBack}>DEFINITION</Text>
+                </View>
+                {word.source_title ? (
+                  <Text style={styles.sourceLabel} numberOfLines={1}>{word.source_title}</Text>
+                ) : <View />}
+              </View>
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation(); speak(word.word) }}
+                style={styles.speakBtnBack}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="volume-medium-outline" size={18} color={colors.accent} />
+                <Text style={styles.speakWordBack}>{word.word}</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.cardTranslation}>{word.translation || '—'}</Text>
+
+              {word.context ? (
+                <View style={styles.contextBox}>
+                  <Text style={styles.cardContext} numberOfLines={3}>{word.context}</Text>
+                </View>
+              ) : null}
+
+              {mode === 'all' && (
+                <View style={styles.flipHint}>
+                  <Ionicons name="arrow-forward-outline" size={14} color={colors.textMuted} />
+                  <Text style={styles.flipHintText}>Sonraki için dokun</Text>
+                </View>
+              )}
+            </Animated.View>
+
+            </Pressable>
+          </Animated.View>
+        </View>
+
+        {/* Flip hint when not flipped */}
+        {mode === 'all' && flipped && (
+          <Animated.View style={[styles.swipeHint, { opacity: swipeHintOpacity }]}>
+            <Ionicons name="swap-horizontal-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.swipeHintText}>Sola ya da sağa kaydır → sonraki kart</Text>
+          </Animated.View>
+        )}
+        {mode === 'due' && (
+          <Animated.View style={[styles.swipeHint, { opacity: swipeHintOpacity }]}>
+            <Ionicons name="swap-horizontal-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.swipeHintText}>Sağa kaydır → biliyorum, sola kaydır → bilmiyorum</Text>
+          </Animated.View>
+        )}
+      </View>
+
+      {/* Grade buttons — only in SM-2 mode, only after flip */}
+      {mode === 'due' && (
+        <Animated.View
+          style={[styles.gradeArea, { opacity: gradeOpacity, transform: [{ translateY: gradeTranslate }] }]}
+          pointerEvents={flipped ? 'auto' : 'none'}
+        >
+          <Text style={styles.gradeLabel}>Biliyor muydun?</Text>
+          <View style={styles.gradeRow}>
+            <TouchableOpacity
+              style={[styles.binaryGradeBtn, styles.binaryGradeBtnLeft]}
+              onPress={() => handleGrade('again')}
+              activeOpacity={0.86}
+            >
+              <Ionicons name="close-circle-outline" size={20} color="#f87171" />
+              <Text style={[styles.binaryGradeLabel, { color: '#f87171' }]}>Bilmiyorum</Text>
+              <Text style={styles.binaryGradePreview}>{previews.again}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.binaryGradeBtn, styles.binaryGradeBtnRight]}
+              onPress={() => handleGrade('good')}
+              activeOpacity={0.86}
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="#4ade80" />
+              <Text style={[styles.binaryGradeLabel, { color: '#4ade80' }]}>Biliyorum</Text>
+              <Text style={styles.binaryGradePreview}>{previews.good}</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
+    </SafeAreaView>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  loadingRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: 'rgba(250,204,21,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgCard,
+  },
+  loadingText: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
+  setMetaCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  setMetaEyebrow: { color: colors.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 1.1, marginBottom: 4 },
+  setMetaTitle: { color: colors.text, fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  setMetaSub: { color: colors.textMuted, fontSize: 12, lineHeight: 18, maxWidth: 240 },
+  setMetaCount: {
+    minWidth: 62,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  setMetaCountValue: { color: colors.accent, fontSize: 22, fontWeight: '900' },
+  setMetaCountLabel: { color: colors.textDim, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  modeSwitchRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  modeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modeChipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  modeChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
+  modeChipTextActive: { color: colors.bg },
+  statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 8 },
+  stagePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4 },
+  stageText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+
+  leechBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    marginHorizontal: 20, marginBottom: 8,
+    backgroundColor: 'rgba(248,113,113,0.07)',
+    borderWidth: 1, borderColor: 'rgba(248,113,113,0.25)',
+    borderRadius: 10, padding: 10,
+  },
+  leechText: { flex: 1, color: '#fca5a5', fontSize: 12, lineHeight: 18 },
+
+  cardArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  cardStackWrap: { width: CARD_W, height: CARD_H, alignItems: 'center', justifyContent: 'center' },
+  cardWrapper: { width: CARD_W, height: CARD_H, zIndex: 2 },
+
+  card: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 26,
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    padding: 28,
+    position: 'absolute',
+    backfaceVisibility: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  cardFront: {
+    backgroundColor: '#fbfbfd',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+  },
+  cardBack: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: 'rgba(96,165,250,0.32)',
+  },
+
+  cardTopRow: { position: 'absolute', top: 18, left: 18, right: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  faceLabelPill: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    backgroundColor: 'rgba(15,23,42,0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  faceLabelText: { color: '#475569', fontSize: 10, fontWeight: '800', letterSpacing: 0.9 },
+  faceLabelPillBack: {
+    backgroundColor: 'rgba(96,165,250,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  faceLabelTextBack: { color: '#2563eb', fontSize: 10, fontWeight: '800', letterSpacing: 0.9 },
+  cefrBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  cefrText: { fontSize: 11, fontWeight: '800' },
+  speakBtn: { padding: 6 },
+
+  cardWord: { fontSize: 42, fontWeight: '900', color: '#111827', textAlign: 'center', letterSpacing: -1 },
+  ipa: { color: '#64748b', fontSize: 15, fontFamily: 'Courier', marginTop: 6, textAlign: 'center' },
+  lapseBadge: { marginTop: 10, backgroundColor: 'rgba(248,113,113,0.12)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  lapseText: { color: '#f87171', fontSize: 11, fontWeight: '700' },
+  flipHint: { position: 'absolute', bottom: 20 },
+  flipHintPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.accentDim,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.22)',
+  },
+  flipHintText: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+
+  backHeaderRow: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    right: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sourceLabel: { color: '#64748b', fontSize: 11, fontWeight: '700', flex: 1, textAlign: 'right' },
+  speakBtnBack: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginBottom: 12, opacity: 0.85 },
+  speakWordBack: { color: '#2563eb', fontSize: 13, fontWeight: '700' },
+  cardTranslation: { fontSize: 34, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 14, letterSpacing: -0.5 },
+  contextBox: { backgroundColor: '#f8fafc', borderRadius: 14, padding: 14, width: '100%', borderWidth: 1, borderColor: 'rgba(148,163,184,0.18)' },
+  cardContext: { color: '#475569', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  swipeBadge: {
+    position: 'absolute',
+    top: 22,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  swipeBadgeLeft: { left: 18 },
+  swipeBadgeRight: { right: 18 },
+  swipeBadgeText: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.7 },
+
+  swipeHint: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
+  swipeHintText: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
+
+  gradeArea: { paddingHorizontal: 16, paddingBottom: 24, paddingTop: 4 },
+  gradeLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  gradeRow: { flexDirection: 'row', gap: 8 },
+  binaryGradeBtn: {
+    flex: 1,
+    minHeight: 84,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: colors.bgCard,
+  },
+  binaryGradeBtnLeft: { borderColor: 'rgba(248,113,113,0.34)', backgroundColor: 'rgba(248,113,113,0.10)' },
+  binaryGradeBtnRight: { borderColor: 'rgba(74,222,128,0.34)', backgroundColor: 'rgba(74,222,128,0.10)' },
+  binaryGradeLabel: { fontSize: 14, fontWeight: '800' },
+  binaryGradePreview: { fontSize: 11, color: colors.textDim, fontWeight: '600', textAlign: 'center' },
+
+  hardestBox: {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: 320,
+  },
+  hardestTitle: { color: colors.textMuted, fontWeight: '700', marginBottom: 8, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
+  hardestRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  hardestItem: { color: colors.text, fontSize: 15, fontWeight: '600' },
+})

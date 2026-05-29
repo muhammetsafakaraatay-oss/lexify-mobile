@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { getArticles } from '../../lib/api'
+import { FALLBACK_ARTICLES } from '../../lib/starterContent'
 import { cefrColors, cefrLevels } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 
@@ -23,6 +24,7 @@ export default function CatalogScreen() {
   const [articles, setArticles] = useState<Article[]>([])
   const [filtered, setFiltered] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedLevel, setSelectedLevel] = useState('Tümü')
   const router = useRouter()
 
@@ -33,12 +35,21 @@ export default function CatalogScreen() {
     else setFiltered(articles.filter(a => a.cefr_level === selectedLevel))
   }, [selectedLevel, articles])
 
-  async function loadArticles() {
+  async function loadArticles(isRefresh = false) {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
     try {
       const data = await getArticles()
-      setArticles(data.articles || [])
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+      const list = data.articles?.length ? data.articles : FALLBACK_ARTICLES
+      setArticles(list)
+    } catch (e) {
+      console.warn('[catalog] load failed, using fallback:', e)
+      setArticles(FALLBACK_ARTICLES)
+    }
+    finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }
 
   function handleArticle(article: Article) {
@@ -75,13 +86,21 @@ export default function CatalogScreen() {
 
       {loading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 48 }} size="large" />
+      ) : filtered.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Bu seviyede makale yok</Text>
+          <Text style={styles.emptyText}>Farklı bir CEFR filtresi seç veya tümünü gör.</Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={() => setSelectedLevel('Tümü')}>
+            <Text style={styles.emptyBtnText}>Tümünü Göster</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={i => i.id}
           contentContainerStyle={{ padding: 16, gap: 12 }}
-          refreshing={loading}
-          onRefresh={loadArticles}
+          refreshing={refreshing}
+          onRefresh={() => loadArticles(true)}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.card} onPress={() => handleArticle(item)}>
               <View style={styles.cardContent}>
@@ -121,4 +140,9 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4, lineHeight: 21 },
   cardDesc: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   cardImage: { width: 80, height: 80, borderRadius: 8, backgroundColor: colors.bgSurface },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
+  emptyTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  emptyBtn: { marginTop: 8, backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 12 },
+  emptyBtnText: { color: colors.bg, fontWeight: '800', fontSize: 14 },
 })

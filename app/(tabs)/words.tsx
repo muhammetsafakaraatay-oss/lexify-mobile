@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useFocusEffect, useRouter } from 'expo-router'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, SafeAreaView, ActivityIndicator
+  TextInput, SafeAreaView, ActivityIndicator, Share, Alert,
 } from 'react-native'
 import { deleteSavedWord, listUniqueSavedWords, SavedWord } from '../../lib/data'
 import { cefrColors, cefrLevels } from '../../lib/cefr'
@@ -46,13 +46,41 @@ export default function WordsScreen() {
   }, [words, search, filter, sortMode])
 
   async function loadWords() {
-    setWords(await listUniqueSavedWords({ orderBy: 'created_at', ascending: false }))
-    setLoading(false)
+    setLoading(true)
+    try {
+      const nextWords = await listUniqueSavedWords({ orderBy: 'created_at', ascending: false })
+      setWords(nextWords)
+    } catch (error) {
+      console.warn('[words] loadWords failed:', error)
+      setWords([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function deleteWord(id: string) {
     await deleteSavedWord(id)
     setWords(p => p.filter(w => w.id !== id))
+  }
+
+  async function shareWordList() {
+    if (filtered.length === 0) {
+      Alert.alert('Liste boş', 'Paylaşılacak kelime yok.')
+      return
+    }
+    const lines = filtered.map((w) => {
+      const tr = w.translation ? ` — ${w.translation}` : ''
+      const level = w.cefr ? ` [${w.cefr}]` : ''
+      return `• ${w.word}${tr}${level}`
+    })
+    try {
+      await Share.share({
+        message: `Lexify — Kelimelerim (${filtered.length})\n\n${lines.join('\n')}`,
+        title: 'Lexify Kelime Listesi',
+      })
+    } catch {
+      /* kullanıcı iptal */
+    }
   }
 
   const mastered = words.filter(w => w.stage === 'mastered').length
@@ -63,13 +91,20 @@ export default function WordsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.title}>Kelimelerim</Text>
-        <View style={styles.topActions}>
-          <TouchableOpacity style={styles.sortBtn} onPress={() => {
-            setSortMode(s => s === 'date' ? 'alpha' : s === 'alpha' ? 'cefr' : 'date')
-          }}>
-            <Ionicons name={sortIcons[sortMode] as any} size={16} color={colors.textMuted} />
-          </TouchableOpacity>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Kelimelerim</Text>
+          <View style={styles.iconActions}>
+            <TouchableOpacity style={styles.sortBtn} onPress={shareWordList}>
+              <Ionicons name="share-outline" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.sortBtn} onPress={() => {
+              setSortMode(s => s === 'date' ? 'alpha' : s === 'alpha' ? 'cefr' : 'date')
+            }}>
+              <Ionicons name={sortIcons[sortMode] as any} size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.gameActions}>
           <TouchableOpacity style={styles.quizBtn} onPress={() => router.push('/(tabs)/flashcards')}>
             <Text style={styles.quizBtnText}>🃏 Kart</Text>
           </TouchableOpacity>
@@ -134,9 +169,19 @@ export default function WordsScreen() {
         <View style={styles.empty}>
           <Ionicons name="search-outline" size={36} color={colors.textMuted} />
           <Text style={styles.emptyText}>{search || filter !== 'Tümü' ? 'Kelime bulunamadı' : 'Henüz kelime yok'}</Text>
-          {!search && filter === 'Tümü' && (
-            <Text style={styles.emptyHint}>Oku ekranında bir kelimeye dokun ve kaydet</Text>
-          )}
+          {!search && filter === 'Tümü' ? (
+            <>
+              <Text style={styles.emptyHint}>Keşfet’ten makale aç veya Oku’da metin yapıştır, kelimeye dokunup kaydet.</Text>
+              <View style={styles.emptyActions}>
+                <TouchableOpacity style={styles.emptyCta} onPress={() => router.push('/(tabs)/catalog')}>
+                  <Text style={styles.emptyCtaText}>Makale Keşfet</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.emptyCta, styles.emptyCtaOutline]} onPress={() => router.push('/(tabs)/oku')}>
+                  <Text style={[styles.emptyCtaText, styles.emptyCtaTextOutline]}>Metin Oku</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
         </View>
       ) : (
         <FlatList
@@ -192,11 +237,13 @@ export default function WordsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
+  topBar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 6, gap: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 28, fontWeight: '800', color: colors.text },
-  topActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  iconActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  gameActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   sortBtn: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 8 },
-  quizBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  quizBtn: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, flex: 1, alignItems: 'center' },
   quizBtnText: { color: colors.bg, fontWeight: '700', fontSize: 13 },
   statsBar: {
     flexDirection: 'row', alignItems: 'center',
@@ -215,7 +262,12 @@ const styles = StyleSheet.create({
   filterText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { color: colors.textMuted, fontSize: 16, fontWeight: '600' },
-  emptyHint: { color: colors.textDim, fontSize: 13, textAlign: 'center', maxWidth: 240 },
+  emptyHint: { color: colors.textDim, fontSize: 13, textAlign: 'center', maxWidth: 280, lineHeight: 19 },
+  emptyActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  emptyCta: { backgroundColor: colors.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  emptyCtaOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
+  emptyCtaText: { color: colors.bg, fontWeight: '800', fontSize: 13 },
+  emptyCtaTextOutline: { color: colors.text },
   wordCard: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border },
   wordMain: { flexDirection: 'row', alignItems: 'flex-start' },
   word: { fontSize: 18, fontWeight: '700', color: colors.text },

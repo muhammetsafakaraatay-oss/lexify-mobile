@@ -5,25 +5,28 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#080808"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.lexify.app",
+      "buildNumber": "7",
       "infoPlist": {
         "NSCameraUsageDescription": "Kitap ve metinlerdeki kelimeleri taramak için kamera kullanılır.",
-        "NSPhotoLibraryUsageDescription": "Galeriden resim seçmek için kullanılır."
+        "NSPhotoLibraryUsageDescription": "Galeriden resim seçmek için kullanılır.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#080808"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -42,8 +45,15 @@
           }
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font"
     ],
-    "scheme": "lexitr"
+    "scheme": "lexitr",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "89faf227-9472-45e6-a040-0371abfda167"
+      }
+    }
   }
 }

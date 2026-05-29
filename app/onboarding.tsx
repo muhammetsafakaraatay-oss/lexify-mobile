@@ -42,8 +42,8 @@ const STEPS: Step[] = [
     accent: '#facc15',
     eyebrow: 'AKILLI OKUMA',
     title: 'Okurken öğren,\nakıştan çıkma',
-    desc: 'BBC, NYT, YouTube — herhangi bir İngilizce kaynağı aç. Bilmediğin kelimeye dokun, anlamı anında gelsin.',
-    highlight: { label: 'Çeviri gecikmesi', value: '< 1 sn' },
+    desc: 'BBC, NYT, YouTube veya ekran üzerindeki bir paragraf. Bilmediğin kelimeye dokun, anlamı akışı bozmadan gelsin.',
+    highlight: { label: 'İlk başarı döngüsü', value: 'Oku → Dokun → Kaydet' },
   },
   {
     kind: 'feature',
@@ -51,8 +51,8 @@ const STEPS: Step[] = [
     accent: '#60a5fa',
     eyebrow: 'ARALIKLI TEKRAR',
     title: 'Bilim destekli\nezberleme',
-    desc: 'Anki ile aynı SM-2 algoritması. Beynin unutmaya yaklaştığı anda kelime tekrar karşına çıkar.',
-    highlight: { label: 'Hafızada kalıcılık', value: '%89' },
+    desc: 'Anki ile aynı SM-2 mantığı. Beynin unutmaya yaklaştığı anda kelime tekrar karşına çıkar.',
+    highlight: { label: 'Çalışma hissi', value: 'Hızlı · akışkan' },
   },
   {
     kind: 'feature',
@@ -60,8 +60,17 @@ const STEPS: Step[] = [
     accent: '#e879f9',
     eyebrow: 'KİŞİSEL TAKİP',
     title: 'CEFR seviyene\ngöre yönlen',
-    desc: 'Her kelime A1\'den C2\'ye etiketlenir. Hangi seviyede patladığını ve sıçraman gereken alanı net gör.',
-    highlight: { label: 'CEFR seviye', value: 'A1 → C2' },
+    desc: 'Her kelime A1\'den C2\'ye etiketlenir. Hangi seviyede zorlandığını ve nerede hızlandığını net gör.',
+    highlight: { label: 'Seviye görünürlüğü', value: 'A1 → C2' },
+  },
+  {
+    kind: 'feature',
+    icon: 'diamond-outline',
+    accent: '#facc15',
+    eyebrow: 'LEXIFY PRO',
+    title: 'Premium ile\ntam güç',
+    desc: 'Kamera OCR, YouTube transcript, sınırsız kelime kaydı ve çalışma oturumları. App Store aboneliğiyle.',
+    highlight: { label: '7 gün ücretsiz deneme', value: 'Yıllık plan' },
   },
   { kind: 'level' },
   { kind: 'goal' },
@@ -132,15 +141,21 @@ export default function OnboardingScreen() {
 
   async function finish() {
     try {
+      const { enableGuestMode, setFirstSessionActive } = await import('../lib/guest')
       await AsyncStorage.multiSet([
         ['onboarding_done', 'true'],
         ['user_level', level],
         ['user_daily_goal', String(goal)],
       ])
+      await enableGuestMode()
+      await setFirstSessionActive(true)
     } catch (e) {
       console.warn('[onboarding] persist failed:', e)
     }
-    router.replace('/auth/login')
+    router.replace({
+      pathname: '/(tabs)/oku',
+      params: { firstSession: '1' },
+    })
   }
 
   function goNext() {
@@ -251,7 +266,7 @@ export default function OnboardingScreen() {
         >
           <Text style={styles.ctaText}>
             {step.kind === 'welcome' ? 'Başlayalım' :
-             step.kind === 'finish'  ? 'Lexify\'a Hoş Geldin' : 'Devam Et'}
+             step.kind === 'finish'  ? 'İlk Metni Aç' : 'Devam Et'}
           </Text>
           <Ionicons
             name={step.kind === 'finish' ? 'sparkles' : 'arrow-forward'}
@@ -304,14 +319,14 @@ function WelcomeStep() {
       </Text>
 
       <Text style={styles.welcomeSub}>
-        Gerçek içeriklerden, kendi temponda, bilimsel aralıklı tekrarla. Sıkıcı kelime listeleri yok.
+        Gerçek içeriklerden, kendi temponda, bilimsel aralıklı tekrarla. Sıkıcı kelime listeleri değil, gerçek öğrenme döngüsü.
       </Text>
 
       <View style={styles.bulletList}>
         {[
-          { icon: 'flash-outline', text: 'Tek dokunuşta çeviri' },
-          { icon: 'shield-checkmark-outline', text: 'Reklamsız, takipsiz' },
-          { icon: 'sync-outline', text: 'Bulut senkronizasyon' },
+          { icon: 'flash-outline', text: 'Kelimeye dokun, anlamı ve telaffuzu hemen aç' },
+          { icon: 'bookmark-outline', text: 'Kaydettiğin an çalışma kuyruğuna girsin' },
+          { icon: 'sync-outline', text: 'Tekrar zamanı geldiğinde karşısına tekrar çık' },
         ].map((b) => (
           <View key={b.icon} style={styles.bulletRow}>
             <View style={styles.bulletDot}>
@@ -365,7 +380,7 @@ function LevelStep({ value, onChange }: { value: string; onChange: (v: string) =
       <Text style={styles.stepEyebrow}>SENİ TANIYALIM</Text>
       <Text style={styles.stepTitle}>İngilizce seviyen nedir?</Text>
       <Text style={styles.stepSub}>
-        Sana doğru zorlukta kelimeler önerebilmemiz için. İstediğin zaman ayarlardan değiştirebilirsin.
+        Sana doğru zorlukta içerik ve kelime yoğunluğu gösterebilmemiz için. İstediğin zaman ayarlardan değiştirebilirsin.
       </Text>
 
       <View style={styles.optionList}>
@@ -406,7 +421,7 @@ function GoalStep({ value, onChange }: { value: number; onChange: (v: number) =>
       <Text style={styles.stepEyebrow}>GÜNLÜK HEDEF</Text>
       <Text style={styles.stepTitle}>Her gün kaç{'\n'}kelime öğreneceksin?</Text>
       <Text style={styles.stepSub}>
-        Küçük başla, alışkanlık oluştur. Hedefin haftada bir gün eksik kalırsa seri devam eder.
+        Küçük başla, alışkanlık oluştur. Tutarlı ilerleme, yüksek ama kısa süreli gazdan daha değerli.
       </Text>
 
       <View style={styles.optionList}>
@@ -493,8 +508,9 @@ function FinishStep({ level, goal }: { level: string; goal: number }) {
       </View>
 
       <Text style={styles.finishHint}>
-        Hesabını oluşturduğunda kelimelerin ve istatistiklerin{' '}
+        Hesabını oluşturduğunda kelimelerin, tekrarların ve istatistiklerin{' '}
         <Text style={{ color: colors.text }}>otomatik buluta yedeklenir</Text>.
+        {'\n'}Pro özellikleri istediğin zaman profilden açabilirsin.
       </Text>
     </View>
   )

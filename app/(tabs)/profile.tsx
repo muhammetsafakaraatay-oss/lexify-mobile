@@ -1,55 +1,43 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, ActivityIndicator, Image
+  TouchableOpacity, ActivityIndicator, Image, Alert, Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
 import { listSavedWords } from '../../lib/data'
-import { CefrLevel, getUserPrefs } from '../../lib/prefs'
+import { CefrLevel, getUserPrefs, setDailyGoal } from '../../lib/prefs'
+import { AchievementList } from '../../components/ui/AchievementList'
+import { getUnlockedAchievements, syncAchievements, type AchievementId } from '../../lib/achievements'
+import { useSubscription } from '../../contexts/SubscriptionContext'
+import { getDevPremiumOverride, setDevPremiumOverride } from '../../lib/subscription'
+import { isGuestMode } from '../../lib/guest'
+import { LEGAL_URLS } from '../../lib/legal'
 
-/**
- * Tarih dizisinden bugüne dayalı kesintisiz seri uzunluğu.
- * created_at null/empty olabilir; tolere eder.
- */
-function streakFromDates(dates: Array<string | null | undefined>): number {
-  const days = new Set<string>()
-  for (const raw of dates) {
-    if (!raw) continue
-    const d = raw.split('T')[0]
-    if (d) days.add(d)
-  }
-  if (!days.size) return 0
-  const sorted = [...days].sort().reverse()
-  let streak = 0
-  let cursor = new Date().toISOString().split('T')[0]
-  for (const day of sorted) {
-    if (day === cursor) {
-      streak++
-      const n = new Date(cursor); n.setDate(n.getDate() - 1)
-      cursor = n.toISOString().split('T')[0]
-    } else if (day < cursor) break
-  }
-  return streak
-}
+import { computeStreakFromDates } from '../../lib/streak'
 
 export default function ProfileScreen() {
+  const { isPro, restore, refresh } = useSubscription()
+  const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [devPro, setDevPro] = useState(false)
   const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0, streak: 0 })
   const [cefrDist, setCefrDist] = useState<Record<string, number>>({})
   const [recentWords, setRecentWords] = useState<any[]>([])
   const [recentHistory, setRecentHistory] = useState<any[]>([])
   const [prefs, setPrefs] = useState<{ level: CefrLevel; dailyGoal: number }>({ level: 'B1', dailyGoal: 10 })
+  const [achievements, setAchievements] = useState<AchievementId[]>([])
+  const [guest, setGuest] = useState(false)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
 
-  useEffect(() => { load() }, [])
+  const GOAL_OPTIONS = [5, 10, 15, 20]
 
-  async function load() {
+  const load = useCallback(async () => {
+    setGuest(await isGuestMode())
     const { data: { user } } = await supabase.auth.getUser()
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -63,7 +51,7 @@ export default function ProfileScreen() {
       const dist: Record<string, number> = {}
       words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
 
-      const streak = streakFromDates(words.map((w: any) => w.created_at))
+      const streak = computeStreakFromDates(words.map((w: any) => w.created_at))
 
       setStats({
         total: words.length,
@@ -80,6 +68,12 @@ export default function ProfileScreen() {
           .slice(0, 3)
       )
       setRecentHistory([])
+      await syncAchievements({
+        totalWords: words.length,
+        mastered: words.filter((w: any) => w.stage === 'mastered').length,
+        streak,
+      })
+      setAchievements(await getUnlockedAchievements())
       setLoading(false)
       return
     }
@@ -97,7 +91,7 @@ export default function ProfileScreen() {
     const dist: Record<string, number> = {}
     words.forEach((w: any) => { if (w.cefr) dist[w.cefr] = (dist[w.cefr] || 0) + 1 })
 
-    const streak = streakFromDates(words.map((w: any) => w.created_at))
+    const streak = computeStreakFromDates(words.map((w: any) => w.created_at))
 
     setStats({
       total: words.length,
@@ -114,8 +108,26 @@ export default function ProfileScreen() {
         .slice(0, 3)
     )
     setRecentHistory(historyRes.data || [])
+
+    await syncAchievements({
+      totalWords: words.length,
+      mastered: words.filter((w: any) => w.stage === 'mastered').length,
+      streak,
+    })
+    setAchievements(await getUnlockedAchievements())
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    void load()
+    if (__DEV__) getDevPremiumOverride().then(setDevPro)
+  }, [load])
+
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
 
   function timeAgo(date: string) {
     const diff = Date.now() - new Date(date).getTime()
@@ -130,7 +142,7 @@ export default function ProfileScreen() {
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
 
-  const name = user?.user_metadata?.full_name || 'Kullanıcı'
+  const name = user?.user_metadata?.full_name || (guest ? 'Misafir' : 'Kullanıcı')
   const avatar = user?.user_metadata?.avatar_url
   const cefrOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
   const maxCefr = Math.max(...Object.values(cefrDist), 1)
@@ -150,7 +162,19 @@ export default function ProfileScreen() {
             )
           }
           <Text style={styles.name}>{name}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
+          <Text style={styles.email}>
+            {user?.email ?? (guest ? 'Cihazında yerel kayıt · giriş yapınca buluta aktarılır' : '')}
+          </Text>
+
+          {guest && !user ? (
+            <TouchableOpacity
+              style={styles.guestLoginBanner}
+              onPress={() => router.push('/auth/login')}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color={colors.accent} />
+              <Text style={styles.guestLoginText}>Google ile giriş yap — kelimelerini senkronla</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <View style={styles.badgeRow}>
             {stats.streak > 0 && (
@@ -186,6 +210,21 @@ export default function ProfileScreen() {
             </View>
           ))}
         </View>
+
+        {(stats.week > 0 || stats.total >= 3) && (
+          <TouchableOpacity
+            style={styles.wrappedBanner}
+            onPress={() => router.push('/(tabs)/wrapped')}
+            activeOpacity={0.88}
+          >
+            <Ionicons name="sparkles-outline" size={18} color={colors.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.wrappedBannerTitle}>Haftalık Wrapped</Text>
+              <Text style={styles.wrappedBannerText}>Bu haftaki ilerlemeni story kartlarıyla gör.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
 
         {stats.total > 0 && (
           <View style={styles.section}>
@@ -258,13 +297,96 @@ export default function ProfileScreen() {
         )}
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🎯 Günlük Hedef</Text>
+          <Text style={styles.sectionHint}>Günde kaç yeni kelime kaydetmek istediğini seç.</Text>
+          <View style={styles.goalRow}>
+            {GOAL_OPTIONS.map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.goalChip, prefs.dailyGoal === g && styles.goalChipActive]}
+                onPress={async () => {
+                  await setDailyGoal(g)
+                  setPrefs((p) => ({ ...p, dailyGoal: g }))
+                }}
+              >
+                <Text style={[styles.goalChipText, prefs.dailyGoal === g && styles.goalChipTextActive]}>
+                  {g}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>🏅 Başarılar</Text>
+            <Text style={styles.sectionBadge}>{achievements.length} / 8</Text>
+          </View>
+          <AchievementList unlocked={achievements} />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>💎 Abonelik</Text>
+          {isPro ? (
+            <View style={styles.proActiveRow}>
+              <Ionicons name="diamond" size={20} color={colors.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.proActiveTitle}>Lexify Pro aktif</Text>
+                <Text style={styles.proActiveSub}>Tüm premium özelliklere erişimin var</Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.proCta} onPress={() => router.push('/paywall')}>
+              <Ionicons name="diamond-outline" size={20} color={colors.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.proCtaTitle}>Pro'ya yükselt</Text>
+                <Text style={styles.proCtaSub}>Kamera, video, sınırsız kayıt</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.restoreRow}
+            onPress={async () => {
+              const result = await restore()
+              Alert.alert(
+                result.ok ? 'Başarılı' : 'Bilgi',
+                result.ok ? 'Aboneliğin geri yüklendi.' : (result.error ?? 'İşlem tamamlanamadı.'),
+              )
+            }}
+          >
+            <Text style={styles.restoreText}>Satın alımları geri yükle</Text>
+          </TouchableOpacity>
+          {__DEV__ ? (
+            <TouchableOpacity
+              style={styles.devToggle}
+              onPress={async () => {
+                const next = !devPro
+                await setDevPremiumOverride(next)
+                setDevPro(next)
+                await refresh()
+              }}
+            >
+              <Text style={styles.devToggleText}>
+                [Dev] Pro simülasyonu: {devPro ? 'Açık' : 'Kapalı'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>⚙️ Hızlı Erişim</Text>
           {[
             { icon: 'folder-outline', label: 'Listelerim', route: '/(tabs)/collections' },
             { icon: 'time-outline', label: 'Okuma Geçmişi', route: '/(tabs)/history' },
             { icon: 'search-outline', label: 'Kelime Ara', route: '/(tabs)/search' },
+            { icon: 'flash-outline', label: 'Hızlı Pratik', route: '/(tabs)/practice' },
             { icon: 'card-outline', label: 'Flashcard', route: '/(tabs)/flashcards' },
             { icon: 'game-controller-outline', label: 'Quiz', route: '/(tabs)/quiz' },
+            { icon: 'map-outline', label: 'CEFR Pasaportu', route: '/(tabs)/passport' },
+            { icon: 'trophy-outline', label: 'Düello', route: '/(tabs)/duel' },
+            { icon: 'musical-notes-outline', label: 'Şarkı / Podcast', route: '/(tabs)/audio-text' },
+            { icon: 'albums-outline', label: 'Widget Hub', route: '/(tabs)/widget' },
           ].map(({ icon, label, route }) => (
             <TouchableOpacity key={label} style={styles.settingRow} onPress={() => router.push(route as any)}>
               <View style={styles.settingLeft}>
@@ -272,6 +394,27 @@ export default function ProfileScreen() {
                 <Text style={styles.settingText}>{label}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Yasal & Destek</Text>
+          {[
+            { icon: 'shield-outline', label: 'Gizlilik Politikası', url: LEGAL_URLS.privacy },
+            { icon: 'document-text-outline', label: 'Kullanım Koşulları', url: LEGAL_URLS.terms },
+            { icon: 'mail-outline', label: 'Destek', url: LEGAL_URLS.support },
+          ].map(({ icon, label, url }) => (
+            <TouchableOpacity
+              key={label}
+              style={styles.settingRow}
+              onPress={() => Linking.openURL(url)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name={icon as any} size={18} color={colors.textMuted} />
+                <Text style={styles.settingText}>{label}</Text>
+              </View>
+              <Ionicons name="open-outline" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
@@ -297,7 +440,21 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   avatarText: { fontSize: 32, fontWeight: '800', color: colors.bg },
   name: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 3 },
-  email: { fontSize: 13, color: colors.textMuted, marginBottom: 10 },
+  email: { fontSize: 13, color: colors.textMuted, marginBottom: 10, textAlign: 'center', paddingHorizontal: 12 },
+  guestLoginBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.accentDim,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.28)',
+    maxWidth: 320,
+  },
+  guestLoginText: { color: colors.accent, fontSize: 12, fontWeight: '700', flex: 1 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 320 },
   streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 1, borderColor: 'rgba(251,146,60,0.3)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   streakEmoji: { fontSize: 14 },
@@ -310,11 +467,38 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   statValue: { fontSize: 22, fontWeight: '800' },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, fontWeight: '600' },
+  wrappedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.bgCard,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  wrappedBannerTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 4 },
+  wrappedBannerText: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   section: { backgroundColor: colors.bgCard, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
   sectionBadge: { fontSize: 12, color: colors.accent, fontWeight: '700' },
   sectionLink: { fontSize: 12, color: colors.accent, fontWeight: '700' },
+  sectionHint: { color: colors.textMuted, fontSize: 12, marginBottom: 12, lineHeight: 17 },
+  goalRow: { flexDirection: 'row', gap: 10 },
+  goalChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgSurface,
+  },
+  goalChipActive: { borderColor: colors.accent, backgroundColor: colors.accentDim },
+  goalChipText: { color: colors.textMuted, fontSize: 16, fontWeight: '800' },
+  goalChipTextActive: { color: colors.accent },
   masteryBar: { height: 8, backgroundColor: '#1a1a1a', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
   masteryFill: { height: '100%', backgroundColor: '#e879f9', borderRadius: 4 },
   masteryHint: { color: colors.textMuted, fontSize: 12 },
@@ -335,4 +519,14 @@ const styles = StyleSheet.create({
   settingText: { color: colors.text, fontSize: 15 },
   signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(248,113,113,0.4)', borderRadius: 14, padding: 14, justifyContent: 'center', marginTop: 4, backgroundColor: 'rgba(248,113,113,0.05)' },
   signOutText: { color: '#f87171', fontWeight: '600', fontSize: 15 },
+  proActiveRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  proActiveTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  proActiveSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  proCta: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  proCtaTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  proCtaSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  restoreRow: { paddingVertical: 12, alignItems: 'center' },
+  restoreText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  devToggle: { paddingVertical: 8, alignItems: 'center' },
+  devToggleText: { color: colors.textDim, fontSize: 11 },
 })
