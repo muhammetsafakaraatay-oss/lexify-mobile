@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Modal, Pressable,
+  ActivityIndicator, Modal, Pressable, Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -28,6 +28,8 @@ export default function PaywallScreen() {
   const pkg = currentOffering?.availablePackages?.[0]
   const priceString = pkg?.product?.priceString ?? '...'
   const title = pkg?.product?.title ?? 'Lexify Premium'
+
+  const noOfferings = !isLoading && !pkg
 
   if (isSubscribed) {
     return (
@@ -113,6 +115,14 @@ export default function PaywallScreen() {
         {/* Pricing */}
         {isLoading ? (
           <ActivityIndicator color={colors.accent} style={{ marginVertical: 24 }} />
+        ) : noOfferings ? (
+          <View style={styles.noOfferingsCard}>
+            <Ionicons name="phone-portrait-outline" size={32} color={colors.accent} style={{ marginBottom: 10 }} />
+            <Text style={styles.noOfferingsTitle}>Mobil Uygulamada Mevcut</Text>
+            <Text style={styles.noOfferingsDesc}>
+              Premium'u etkinleştirmek için iOS veya Android uygulamasını kullanın.
+            </Text>
+          </View>
         ) : (
           <TouchableOpacity style={styles.pricingCard} onPress={() => setConfirmVisible(true)} activeOpacity={0.85}>
             <View style={styles.pricingRadio}>
@@ -128,27 +138,33 @@ export default function PaywallScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {/* CTA */}
-        <TouchableOpacity
-          style={[styles.ctaBtn, (isPurchasing || isLoading || !pkg) && styles.ctaBtnDisabled]}
-          onPress={() => setConfirmVisible(true)}
-          disabled={isPurchasing || isLoading || !pkg}
-          activeOpacity={0.85}
-        >
-          {isPurchasing
-            ? <ActivityIndicator color={colors.bg} />
-            : <Text style={styles.ctaBtnText}>7 Gün Ücretsiz Dene →</Text>
-          }
-        </TouchableOpacity>
+        {!noOfferings && (
+          <TouchableOpacity
+            style={[styles.ctaBtn, (isPurchasing || isLoading || !pkg) && styles.ctaBtnDisabled]}
+            onPress={() => setConfirmVisible(true)}
+            disabled={isPurchasing || isLoading || !pkg}
+            activeOpacity={0.85}
+          >
+            {isPurchasing
+              ? <ActivityIndicator color={colors.bg} />
+              : <Text style={styles.ctaBtnText}>7 Gün Ücretsiz Dene →</Text>
+            }
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={isRestoring}>
-          {isRestoring
-            ? <ActivityIndicator color={colors.textMuted} size="small" />
-            : <Text style={styles.restoreText}>Satın almaları geri yükle</Text>
-          }
-        </TouchableOpacity>
+        {!noOfferings && (
+          <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={isRestoring}>
+            {isRestoring
+              ? <ActivityIndicator color={colors.textMuted} size="small" />
+              : <Text style={styles.restoreText}>Satın almaları geri yükle</Text>
+            }
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.legalText}>
-          Abonelik otomatik yenilenir. İptal için App Store → Abonelikler.
+          {noOfferings
+            ? 'App Store ve Google Play üzerinden premium abonelik satın alabilirsiniz.'
+            : 'Abonelik otomatik yenilenir. İptal için App Store → Abonelikler.'}
         </Text>
       </ScrollView>
 
@@ -233,6 +249,10 @@ const styles = StyleSheet.create({
   restoreText: { color: colors.textMuted, fontSize: 13 },
 
   legalText: { color: '#444', fontSize: 11, textAlign: 'center', lineHeight: 16 },
+
+  noOfferingsCard: { backgroundColor: colors.bgCard, borderRadius: 16, padding: 24, marginBottom: 20, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  noOfferingsTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: 6, textAlign: 'center' },
+  noOfferingsDesc: { fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
 
   successTitle: { fontSize: 22, fontWeight: '900', color: colors.text },
   successSub: { fontSize: 14, color: colors.textMuted },
