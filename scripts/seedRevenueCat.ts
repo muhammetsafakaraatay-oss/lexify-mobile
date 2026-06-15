@@ -26,7 +26,7 @@ import {
   type CreateProductData,
 } from '@replit/revenuecat-sdk'
 
-const PROJECT_NAME = 'Lexify'
+const PROJECT_NAME = 'lexfly'
 
 const PRODUCT_IDENTIFIER = 'lexify_premium_monthly'
 const PLAY_STORE_PRODUCT_IDENTIFIER = 'lexify_premium_monthly:monthly'

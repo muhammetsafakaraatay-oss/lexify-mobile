@@ -1,0 +1,1 @@
+- [RevenueCat setup](revenuecat-setup.md) — RC integrated with test store; project "lexfly" (proj2f69bb99); entitlement "premium"; seed script at scripts/seedRevenueCat.ts

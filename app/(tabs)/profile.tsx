@@ -6,8 +6,10 @@ import { useRouter } from 'expo-router'
 import { cefrColors } from '../../lib/cefr'
 import { colors } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
+import { useSubscription } from '../../lib/revenuecat'
 
 export default function ProfileScreen() {
+  const { isSubscribed } = useSubscription()
   const [user, setUser] = useState<ReplitUser | null>(null)
   const [stats, setStats] = useState({ total: 0, mastered: 0, today: 0, week: 0, streak: 0 })
   const [cefrDist, setCefrDist] = useState<Record<string, number>>({})
@@ -190,6 +192,27 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Premium banner */}
+        {!isSubscribed && (
+          <TouchableOpacity style={styles.premiumBanner} onPress={() => router.push('/paywall')} activeOpacity={0.85}>
+            <View style={styles.premiumLeft}>
+              <Text style={styles.premiumEmoji}>✦</Text>
+              <View>
+                <Text style={styles.premiumTitle}>Premium'a Geç</Text>
+                <Text style={styles.premiumSub}>Sınırsız kelime, OCR, YouTube ve daha fazlası</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.accent} />
+          </TouchableOpacity>
+        )}
+
+        {isSubscribed && (
+          <View style={styles.premiumActiveBanner}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.accent} />
+            <Text style={styles.premiumActiveText}>Premium aktif ✦</Text>
+          </View>
+        )}
+
         {/* Sign out */}
         <TouchableOpacity style={styles.signOutBtn} onPress={() => signOut()}>
           <Ionicons name="log-out-outline" size={18} color="#f87171" />
@@ -242,4 +265,11 @@ const styles = StyleSheet.create({
   linkText: { color: colors.text, fontSize: 15 },
   signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)', borderRadius: 14, padding: 14, marginTop: 4, backgroundColor: 'rgba(248,113,113,0.05)' },
   signOutText: { color: '#f87171', fontWeight: '600', fontSize: 15 },
+  premiumBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.accentDim, borderWidth: 1, borderColor: 'rgba(250,204,21,0.35)', borderRadius: 16, padding: 16, marginBottom: 12 },
+  premiumLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  premiumEmoji: { fontSize: 20, color: colors.accent, fontWeight: '900' },
+  premiumTitle: { fontSize: 15, fontWeight: '800', color: colors.accent },
+  premiumSub: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  premiumActiveBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accentDim, borderWidth: 1, borderColor: 'rgba(250,204,21,0.3)', borderRadius: 14, padding: 14, marginBottom: 12 },
+  premiumActiveText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
 })
