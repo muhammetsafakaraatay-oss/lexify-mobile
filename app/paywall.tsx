@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Modal, Pressable, Platform,
+  ActivityIndicator, Modal, Pressable,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { colors } from '../lib/theme'
 import { useSubscription } from '../lib/revenuecat'
+import type { PurchasesPackage } from 'react-native-purchases'
 
 const FEATURES = [
   { icon: 'mic-outline', title: 'Sesli pratik arsivi', desc: 'Kendi sesinle pratik yap, transcript ve koçluk notlarini sakla' },
@@ -20,16 +21,32 @@ const FEATURES = [
 export default function PaywallScreen() {
   const router = useRouter()
   const { offerings, isSubscribed, isLoading, isPurchasing, isRestoring, purchase, restore } = useSubscription()
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly')
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [successVisible, setSuccessVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const currentOffering = offerings?.current
-  const pkg = currentOffering?.availablePackages?.[0]
-  const priceString = pkg?.product?.priceString ?? '...'
-  const title = pkg?.product?.title ?? 'Lexify Premium'
+  const packages = offerings?.current?.availablePackages ?? []
+  const monthlyPkg = packages.find(
+    (p: PurchasesPackage) => p.packageType === 'MONTHLY' || p.identifier === '$rc_monthly'
+  )
+  const yearlyPkg = packages.find(
+    (p: PurchasesPackage) => p.packageType === 'ANNUAL' || p.identifier === '$rc_annual'
+  )
 
-  const noOfferings = !isLoading && !pkg
+  const selectedPkg = selectedPlan === 'yearly' ? (yearlyPkg ?? monthlyPkg) : (monthlyPkg ?? yearlyPkg)
+  const noOfferings = !isLoading && packages.length === 0
+
+  const monthlyPrice = monthlyPkg?.product?.priceString ?? '...'
+  const yearlyPrice = yearlyPkg?.product?.priceString ?? '...'
+
+  const yearlyPerMonth = yearlyPkg?.product?.price
+    ? (yearlyPkg.product.price / 12).toFixed(2)
+    : null
+  const monthlyCurrencySymbol = monthlyPkg?.product?.currencyCode === 'TRY' ? '₺' : '$'
+  const savingsPercent = monthlyPkg?.product?.price && yearlyPkg?.product?.price
+    ? Math.round((1 - yearlyPkg.product.price / (monthlyPkg.product.price * 12)) * 100)
+    : null
 
   if (isSubscribed) {
     return (
@@ -47,11 +64,11 @@ export default function PaywallScreen() {
   }
 
   async function handlePurchase() {
-    if (!pkg) return
+    if (!selectedPkg) return
     setConfirmVisible(false)
     setError(null)
     try {
-      await purchase(pkg)
+      await purchase(selectedPkg)
       setSuccessVisible(true)
     } catch (e: any) {
       if (e?.userCancelled) return
@@ -68,6 +85,10 @@ export default function PaywallScreen() {
       setError(e?.message ?? 'Geri yükleme başarısız.')
     }
   }
+
+  const confirmTitle = selectedPkg?.product?.title ?? 'Lexify Premium'
+  const confirmPrice = selectedPkg?.product?.priceString ?? '...'
+  const confirmPer = selectedPlan === 'yearly' ? '/yıl' : '/ay'
 
   return (
     <SafeAreaView style={styles.container}>
@@ -124,15 +145,59 @@ export default function PaywallScreen() {
             </Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.pricingCard} onPress={() => setConfirmVisible(true)} activeOpacity={0.85}>
-            <View style={styles.pricingRadio}>
-              <View style={styles.pricingRadioInner} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pricingTitle}>Aylık</Text>
-            </View>
-            <Text style={styles.pricingAmount}>{priceString}<Text style={styles.pricingPer}>/ay</Text></Text>
-          </TouchableOpacity>
+          <View style={styles.plansContainer}>
+            {/* Yearly plan */}
+            {yearlyPkg && (
+              <TouchableOpacity
+                style={[styles.planCard, selectedPlan === 'yearly' && styles.planCardSelected]}
+                onPress={() => setSelectedPlan('yearly')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.planCardTop}>
+                  <View style={[styles.planRadio, selectedPlan === 'yearly' && styles.planRadioSelected]}>
+                    {selectedPlan === 'yearly' && <View style={styles.planRadioInner} />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.planTitle, selectedPlan === 'yearly' && styles.planTitleSelected]}>Yıllık</Text>
+                    {yearlyPerMonth && (
+                      <Text style={styles.planSub}>{monthlyCurrencySymbol}{yearlyPerMonth}/ay olarak</Text>
+                    )}
+                  </View>
+                  <View style={styles.planPriceCol}>
+                    <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>{yearlyPrice}</Text>
+                    <Text style={styles.planPricePer}>/yıl</Text>
+                  </View>
+                </View>
+                {savingsPercent && savingsPercent > 0 && (
+                  <View style={styles.savingsBadge}>
+                    <Text style={styles.savingsBadgeText}>%{savingsPercent} tasarruf</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Monthly plan */}
+            {monthlyPkg && (
+              <TouchableOpacity
+                style={[styles.planCard, selectedPlan === 'monthly' && styles.planCardSelected]}
+                onPress={() => setSelectedPlan('monthly')}
+                activeOpacity={0.85}
+              >
+                <View style={styles.planCardTop}>
+                  <View style={[styles.planRadio, selectedPlan === 'monthly' && styles.planRadioSelected]}>
+                    {selectedPlan === 'monthly' && <View style={styles.planRadioInner} />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.planTitle, selectedPlan === 'monthly' && styles.planTitleSelected]}>Aylık</Text>
+                  </View>
+                  <View style={styles.planPriceCol}>
+                    <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>{monthlyPrice}</Text>
+                    <Text style={styles.planPricePer}>/ay</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -140,9 +205,9 @@ export default function PaywallScreen() {
         {/* CTA */}
         {!noOfferings && (
           <TouchableOpacity
-            style={[styles.ctaBtn, (isPurchasing || isLoading || !pkg) && styles.ctaBtnDisabled]}
+            style={[styles.ctaBtn, (isPurchasing || isLoading || !selectedPkg) && styles.ctaBtnDisabled]}
             onPress={() => setConfirmVisible(true)}
-            disabled={isPurchasing || isLoading || !pkg}
+            disabled={isPurchasing || isLoading || !selectedPkg}
             activeOpacity={0.85}
           >
             {isPurchasing
@@ -174,8 +239,9 @@ export default function PaywallScreen() {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Satın almayı onayla</Text>
             <Text style={styles.modalBody}>
-              <Text style={{ fontWeight: '700', color: colors.text }}>{title}</Text>
-              {' '}— {priceString}/ay{'\n'}7 gün ücretsiz deneme ile başlar.
+              <Text style={{ fontWeight: '700', color: colors.text }}>{confirmTitle}</Text>
+              {'\n'}{confirmPrice}{confirmPer}
+              {'\n'}7 gün ücretsiz deneme ile başlar.
             </Text>
             <TouchableOpacity style={styles.modalConfirm} onPress={handlePurchase}>
               <Text style={styles.modalConfirmText}>Onayla</Text>
@@ -232,12 +298,24 @@ const styles = StyleSheet.create({
   featureTitle: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 2 },
   featureDesc: { fontSize: 11, color: colors.textMuted, lineHeight: 16 },
 
-  pricingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1.5, borderColor: colors.accent, gap: 12 },
-  pricingRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  pricingRadioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
-  pricingTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  pricingAmount: { fontSize: 20, fontWeight: '900', color: colors.accent },
-  pricingPer: { fontSize: 13, fontWeight: '400', color: colors.textMuted },
+  plansContainer: { gap: 10, marginBottom: 20 },
+
+  planCard: { backgroundColor: colors.bgCard, borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: colors.border, overflow: 'hidden' },
+  planCardSelected: { borderColor: colors.accent, backgroundColor: colors.accentDim + '33' },
+  planCardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  planRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  planRadioSelected: { borderColor: colors.accent },
+  planRadioInner: { width: 11, height: 11, borderRadius: 6, backgroundColor: colors.accent },
+  planTitle: { fontSize: 16, fontWeight: '700', color: colors.textMuted },
+  planTitleSelected: { color: colors.text },
+  planSub: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  planPriceCol: { alignItems: 'flex-end' },
+  planPrice: { fontSize: 20, fontWeight: '900', color: colors.textMuted },
+  planPriceSelected: { color: colors.accent },
+  planPricePer: { fontSize: 11, color: colors.textMuted, fontWeight: '500' },
+
+  savingsBadge: { marginTop: 10, alignSelf: 'flex-start', backgroundColor: '#4ade8022', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#4ade8055' },
+  savingsBadgeText: { color: '#4ade80', fontSize: 11, fontWeight: '800' },
 
   errorText: { color: '#f87171', fontSize: 13, textAlign: 'center', marginBottom: 12 },
 
