@@ -1,33 +1,51 @@
 const http = require('http')
-const httpProxy = require('http-proxy')
-const fetch = require('node-fetch')
+const net = require('net')
 
 const EXPO_PORT = 8080
 const API_PORT = 3001
 const PORT = 5000
 
-const proxy = httpProxy.createProxyServer({ ws: true })
-
-proxy.on('error', (err, req, res) => {
-  if (res && res.writeHead) {
+function proxyRequest(req, res, targetPort) {
+  const options = {
+    hostname: 'localhost',
+    port: targetPort,
+    path: req.url,
+    method: req.method,
+    headers: req.headers,
+  }
+  const proxy = http.request(options, upstream => {
+    res.writeHead(upstream.statusCode, upstream.headers)
+    upstream.pipe(res)
+  })
+  proxy.on('error', err => {
     res.writeHead(502, { 'Content-Type': 'text/plain' })
     res.end('Proxy error: ' + err.message)
-  }
-})
+  })
+  req.pipe(proxy)
+}
 
-const server = http.createServer(async (req, res) => {
-  if (
-    (req.url && req.url.startsWith('/api/')) ||
-    (req.url && req.url.startsWith('/tts'))
-  ) {
-    proxy.web(req, res, { target: `http://localhost:${API_PORT}` })
+const server = http.createServer((req, res) => {
+  const url = req.url || ''
+  if (url.startsWith('/api/') || url.startsWith('/tts')) {
+    proxyRequest(req, res, API_PORT)
   } else {
-    proxy.web(req, res, { target: `http://localhost:${EXPO_PORT}` })
+    proxyRequest(req, res, EXPO_PORT)
   }
 })
 
 server.on('upgrade', (req, socket, head) => {
-  proxy.ws(req, socket, head, { target: `ws://localhost:${EXPO_PORT}` })
+  const targetSocket = net.connect(EXPO_PORT, 'localhost', () => {
+    targetSocket.write(
+      `${req.method} ${req.url} HTTP/1.1\r\n` +
+      Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
+      '\r\n\r\n'
+    )
+    targetSocket.write(head)
+    socket.pipe(targetSocket)
+    targetSocket.pipe(socket)
+  })
+  targetSocket.on('error', () => socket.destroy())
+  socket.on('error', () => targetSocket.destroy())
 })
 
 server.listen(PORT, '0.0.0.0', () => {
